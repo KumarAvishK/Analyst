@@ -1,0 +1,501 @@
+fan_id,name,email_addr,age,gender,location,income_bracket,season_ticket_holder,games_attended_2024,avg_ticket_spend,seat_section,concession_spend,parking_pass,primary_channel,avg_game_watch_time,games_watched_2024,subscription_service,favorite_broadcast_day,co_viewing,merch_spend_2024,favorite_merch_category,favorite_team,social_media_engagement,mobile_app_usage,email_subscriber,fan_loyalty_score
+FAN00001,James Brown,james.brown1@example.com,46,Female,"Los Angeles, CA",<40k,Yes,2,151.36,Upper,16.44,No,CBS,82,1,YouTube TV,Sunday,4,238.74,Caps,Philadelphia Eagles,Low,Yes,Yes,20
+FAN00002,Michael Anderson,michael.anderson2@example.com,59,Female,"Boston, MA",<40k,Yes,6,176.59,Upper,15.93,No,Fox,53,1,YouTube TV,Sunday,4,93.11,Collectibles,Seattle Seahawks,Medium,Yes,No,42
+FAN00003,Jessica Johnson,jessica.johnson3@example.com,57,Female,"Dallas, TX",80-120k,No,3,196.53,Lower,56.85,No,CBS,84,15,None,Sunday,5,324.76,Home Décor,Chicago Bears,Low,No,No,27
+FAN00004,Christopher Martinez,christopher.martinez4@example.com,46,Male,"Chicago, IL",80-120k,No,2,133.42,Club,70.31,Yes,Fox,85,6,NFL+,Sunday,2,792.13,Jerseys,Pittsburgh Steelers,Low,Yes,Yes,33
+FAN00005,Sarah Wilson,sarah.wilson5@example.com,57,Female,"Boston, MA",<40k,Yes,9,122.96,Club,16.78,Yes,ESPN,96,3,None,Sunday,5,153.17,Collectibles,Kansas City Chiefs,High,No,Yes,69
+FAN00006,Sarah Garcia,sarah.garcia6@example.com,45,Female,"Atlanta, GA",120k+,Yes,8,442.44,VIP,37.26,Yes,ESPN,71,19,None,Monday,3,1450.11,Jerseys,San Francisco 49ers,High,Yes,Yes,84
+FAN00007,Olivia Anderson,olivia.anderson7@example.com,71,Male,"Dallas, TX",<40k,No,4,122.55,Upper,34.94,Yes,ESPN,46,1,YouTube TV,Sunday,5,161.53,Home Décor,Dallas Cowboys,Low,Yes,No,21
+FAN00008,David Wilson,david.wilson8@example.com,43,Male,"Los Angeles, CA",120k+,No,5,272.62,Club,52.5,Yes,ESPN,168,5,None,Monday,4,1508.2,Collectibles,Kansas City Chiefs,Low,Yes,Yes,47
+FAN00009,Sarah Brown,sarah.brown9@example.com,49,Male,"Denver, CO",<40k,Yes,9,172.27,Upper,33.06,No,Fox,156,19,YouTube TV,Sunday,1,159.03,Home Décor,San Francisco 49ers,High,No,No,75
+FAN00010,Daniel Martinez,daniel.martinez10@example.com,52,Female,"Los Angeles, CA",80-120k,No,3,272.4,Lower,55.65,Yes,ESPN,143,17,Amazon Prime,Sunday,3,713.79,Home Décor,Buffalo Bills,High,Yes,Yes,75
+FAN00011,Jennifer Jones,jennifer.jones11@example.com,65,Female,"Philadelphia, PA",80-120k,Yes,5,236.93,Club,83.52,Yes,NBC,71,1,None,Sunday,4,709.53,Collectibles,Dallas Cowboys,Medium,Yes,No,51
+FAN00012,Sarah Brown,sarah.brown12@example.com,52,Male,"Denver, CO",80-120k,No,0,127.85,Lower,53.69,Yes,CBS,160,0,Peacock,Sunday,1,796.73,Caps,Philadelphia Eagles,Low,Yes,Yes,15
+FAN00013,Olivia Johnson,olivia.johnson13@example.com,49,Female,"Philadelphia, PA",80-120k,No,9,184.56,Lower,71.66,No,ESPN,57,6,NFL+,Sunday,4,352.5,Jerseys,Seattle Seahawks,Medium,Yes,No,79
+FAN00014,Ashley Williams,ashley.williams14@example.com,40,Female,"Philadelphia, PA",<40k,Yes,9,125.25,Lower,72.58,Yes,CBS,145,0,None,Sunday,4,175.39,Jerseys,Pittsburgh Steelers,Medium,Yes,Yes,61
+FAN00015,Jessica Williams,jessica.williams15@example.com,72,Male,"Boston, MA",<40k,Yes,9,67.26,Lower,82.39,No,ESPN,173,0,Amazon Prime,Sunday,1,387.81,Home Décor,San Francisco 49ers,Low,Yes,Yes,28
+FAN00016,David Garcia,david.garcia16@example.com,46,Male,"New York, NY",40-80k,Yes,3,82.21,Lower,27.27,Yes,Fox,129,6,YouTube TV,Sunday,5,142.39,Collectibles,Chicago Bears,Low,Yes,No,23
+FAN00017,Mike Brown,mike.brown17@example.com,48,Male,"Boston, MA",<40k,No,11,171.35,Upper,56.0,No,CBS,168,0,NFL+,Monday,3,200.42,Jerseys,Green Bay Packers,Medium,No,No,55
+FAN00018,Michael Wilson,michael.wilson18@example.com,46,Female,"Atlanta, GA",<40k,No,1,63.1,Upper,33.25,Yes,Fox,158,12,Peacock,Monday,4,7.29,Jerseys,San Francisco 49ers,Medium,No,Yes,56
+FAN00019,David Martinez,david.martinez19@example.com,41,Female,"Miami, FL",80-120k,Yes,6,298.29,Lower,67.56,No,ESPN,74,16,NFL+,Sunday,1,447.57,Caps,Green Bay Packers,Medium,Yes,Yes,63
+FAN00020,Daniel Williams,daniel.williams20@example.com,29,Male,"Chicago, IL",40-80k,No,3,174.38,Upper,62.08,No,ESPN,83,12,None,Sunday,2,270.71,Jerseys,Green Bay Packers,Medium,No,Yes,55
+FAN00021,Mike Wilson,mike.wilson21@example.com,26,Female,"Atlanta, GA",80-120k,Yes,4,231.28,Upper,31.33,Yes,Amazon Prime,109,19,NFL+,Thursday,1,260.67,Jerseys,Kansas City Chiefs,Medium,Yes,No,48
+FAN00022,Sarah Moore,sarah.moore22@example.com,61,Male,"Atlanta, GA",40-80k,No,7,105.15,Upper,23.23,Yes,ESPN,175,12,YouTube TV,Thursday,4,362.54,Jerseys,Buffalo Bills,Medium,No,Yes,52
+FAN00023,Emma Taylor,emma.taylor23@example.com,61,Female,"Los Angeles, CA",120k+,Yes,8,366.8,Upper,30.18,Yes,ESPN,161,2,NFL+,Thursday,2,984.03,Home Décor,Seattle Seahawks,High,Yes,Yes,100
+FAN00024,David Davis,david.davis24@example.com,45,Other,"Philadelphia, PA",40-80k,Yes,8,100.47,Upper,36.67,No,CBS,90,2,None,Thursday,3,91.76,Home Décor,San Francisco 49ers,Medium,Yes,Yes,75
+FAN00025,Olivia Johnson,olivia.johnson25@example.com,62,Female,"Denver, CO",<40k,No,10,103.46,Upper,54.84,Yes,ESPN,143,0,None,Sunday,4,311.04,Jerseys,San Francisco 49ers,High,No,No,75
+FAN00026,David Miller,david.miller26@example.com,54,Female,"Los Angeles, CA",80-120k,Yes,0,256.27,Lower,67.99,Yes,Fox,162,2,Peacock,Sunday,1,426.71,Caps,San Francisco 49ers,Low,Yes,No,10
+FAN00027,John Miller,john.miller27@example.com,32,Male,"Dallas, TX",80-120k,No,10,235.09,VIP,21.37,No,ESPN,123,9,Peacock,Sunday,5,683.03,Home Décor,Chicago Bears,Medium,No,Yes,73
+FAN00028,Ashley Brown,ashley.brown28@example.com,41,Male,"Denver, CO",<40k,No,10,130.7,Upper,24.72,Yes,CBS,69,2,Peacock,Sunday,2,138.97,Jerseys,Chicago Bears,Medium,Yes,No,50
+FAN00029,Mike Wilson,mike.wilson29@example.com,59,Male,"Atlanta, GA",<40k,No,8,61.53,Upper,21.46,Yes,NBC,107,15,None,Sunday,4,48.25,Jerseys,Seattle Seahawks,Low,Yes,Yes,43
+FAN00030,Olivia Garcia,olivia.garcia30@example.com,31,Female,"Boston, MA",40-80k,No,11,97.96,Lower,22.5,Yes,NBC,159,14,NFL+,Monday,4,185.01,Caps,Pittsburgh Steelers,Low,Yes,Yes,16
+FAN00031,Sophia Wilson,sophia.wilson31@example.com,42,Female,"Dallas, TX",80-120k,No,7,226.85,Club,45.22,Yes,ESPN,145,5,YouTube TV,Sunday,2,607.46,Collectibles,Seattle Seahawks,Medium,Yes,Yes,75
+FAN00032,Daniel Smith,daniel.smith32@example.com,70,Male,"Boston, MA",<40k,No,2,69.87,Upper,51.72,Yes,CBS,50,1,YouTube TV,Thursday,4,98.38,Collectibles,Philadelphia Eagles,Low,No,Yes,39
+FAN00033,Emma Williams,emma.williams33@example.com,74,Male,"Chicago, IL",80-120k,Yes,3,216.31,Club,31.97,Yes,Fox,108,5,None,Sunday,4,485.97,Jerseys,Green Bay Packers,Low,Yes,Yes,35
+FAN00034,Sophia Jones,sophia.jones34@example.com,40,Female,"Seattle, WA",40-80k,No,2,76.22,Upper,39.42,No,CBS,122,10,NFL+,Sunday,3,273.83,Collectibles,Dallas Cowboys,Low,Yes,Yes,18
+FAN00035,Christopher Davis,christopher.davis35@example.com,28,Female,"Los Angeles, CA",80-120k,Yes,9,156.29,Upper,42.47,No,NBC,169,5,NFL+,Monday,1,298.19,Jerseys,Dallas Cowboys,High,No,Yes,78
+FAN00036,Jennifer Jones,jennifer.jones36@example.com,57,Female,"New York, NY",<40k,No,6,120.57,Upper,55.12,No,ESPN,141,4,Peacock,Monday,4,172.61,Caps,New England Patriots,Medium,No,No,54
+FAN00037,John Garcia,john.garcia37@example.com,55,Male,"Los Angeles, CA",40-80k,No,1,99.25,Lower,15.85,Yes,CBS,80,10,Peacock,Sunday,3,182.8,Caps,Chicago Bears,Medium,Yes,Yes,47
+FAN00038,James Taylor,james.taylor38@example.com,63,Female,"Los Angeles, CA",40-80k,No,4,168.54,Upper,79.57,No,Fox,136,8,Peacock,Monday,1,55.65,Caps,Pittsburgh Steelers,Low,Yes,Yes,49
+FAN00039,Sophia Brown,sophia.brown39@example.com,71,Female,"Atlanta, GA",80-120k,No,4,179.79,Lower,57.26,Yes,CBS,69,10,Amazon Prime,Sunday,3,386.87,Caps,Dallas Cowboys,Medium,Yes,Yes,48
+FAN00040,Michael Williams,michael.williams40@example.com,71,Male,"Dallas, TX",<40k,No,6,114.79,Club,83.29,Yes,CBS,162,7,NFL+,Sunday,5,167.57,Caps,Pittsburgh Steelers,Medium,Yes,No,61
+FAN00041,Jennifer Moore,jennifer.moore41@example.com,66,Female,"New York, NY",<40k,No,5,111.37,Upper,68.57,Yes,Amazon Prime,99,6,Peacock,Sunday,2,225.94,Collectibles,New England Patriots,Medium,Yes,Yes,41
+FAN00042,Ashley Johnson,ashley.johnson42@example.com,24,Male,"Miami, FL",80-120k,Yes,0,124.88,Lower,53.97,No,NBC,140,13,Peacock,Thursday,4,333.18,Jerseys,Philadelphia Eagles,Medium,Yes,Yes,47
+FAN00043,Mike Miller,mike.miller43@example.com,27,Female,"Miami, FL",<40k,Yes,9,77.03,Upper,72.76,Yes,CBS,64,4,None,Sunday,1,10.61,Caps,San Francisco 49ers,Medium,Yes,No,57
+FAN00044,Emma Wilson,emma.wilson44@example.com,41,Male,"Seattle, WA",<40k,No,8,123.55,Upper,33.05,Yes,NBC,48,12,Amazon Prime,Sunday,3,394.15,Caps,New England Patriots,Low,Yes,No,26
+FAN00045,Daniel Garcia,daniel.garcia45@example.com,51,Male,"Philadelphia, PA",40-80k,No,1,134.68,Upper,57.04,No,Fox,166,13,Amazon Prime,Sunday,3,331.9,Jerseys,Green Bay Packers,Low,Yes,No,30
+FAN00046,Christopher Jones,christopher.jones46@example.com,28,Male,"Seattle, WA",<40k,No,4,96.24,Upper,48.86,Yes,CBS,125,12,Peacock,Sunday,2,287.62,Caps,San Francisco 49ers,Medium,Yes,Yes,73
+FAN00047,John Martinez,john.martinez47@example.com,60,Male,"Chicago, IL",40-80k,Yes,10,109.76,Upper,79.21,Yes,Fox,101,16,YouTube TV,Sunday,3,30.37,Home Décor,San Francisco 49ers,Low,No,No,39
+FAN00048,Emma Davis,emma.davis48@example.com,42,Female,"Boston, MA",120k+,No,9,394.0,Upper,54.76,No,Amazon Prime,51,8,Peacock,Thursday,2,1539.76,Collectibles,Pittsburgh Steelers,Medium,No,No,71
+FAN00049,Jessica Miller,jessica.miller49@example.com,52,Female,"Seattle, WA",40-80k,No,6,157.76,Upper,19.57,Yes,ESPN,48,12,Amazon Prime,Sunday,5,14.8,Caps,New England Patriots,Low,Yes,No,43
+FAN00050,Jennifer Anderson,jennifer.anderson50@example.com,72,Female,"Miami, FL",<40k,No,7,99.92,Upper,34.02,Yes,ESPN,147,19,None,Monday,1,373.04,Collectibles,Seattle Seahawks,Low,Yes,Yes,38
+FAN00051,Jennifer Jones,jennifer.jones51@example.com,42,Male,"Atlanta, GA",<40k,No,4,168.34,Upper,21.26,Yes,NBC,106,12,Amazon Prime,Sunday,4,18.04,Home Décor,Seattle Seahawks,Medium,No,No,43
+FAN00052,David Williams,david.williams52@example.com,62,Female,"Philadelphia, PA",<40k,No,0,56.1,Upper,51.28,Yes,ESPN,105,9,Peacock,Monday,1,153.64,Home Décor,Green Bay Packers,High,No,Yes,70
+FAN00053,Olivia Moore,olivia.moore53@example.com,64,Male,"Chicago, IL",<40k,No,11,166.34,Upper,17.48,Yes,ESPN,49,10,Peacock,Sunday,4,344.05,Collectibles,Philadelphia Eagles,Medium,Yes,No,67
+FAN00054,Sophia Johnson,sophia.johnson54@example.com,23,Female,"Chicago, IL",120k+,No,7,232.84,VIP,61.35,Yes,Amazon Prime,77,5,Peacock,Monday,4,1841.72,Jerseys,Buffalo Bills,Low,Yes,Yes,41
+FAN00055,David Taylor,david.taylor55@example.com,53,Female,"Atlanta, GA",40-80k,No,4,147.85,Lower,67.05,Yes,CBS,46,13,None,Sunday,2,63.44,Home Décor,Dallas Cowboys,High,Yes,Yes,95
+FAN00056,Mike Wilson,mike.wilson56@example.com,41,Male,"Miami, FL",80-120k,Yes,3,143.12,Upper,27.16,No,CBS,61,11,NFL+,Sunday,1,370.01,Caps,Chicago Bears,Medium,Yes,No,73
+FAN00057,Jennifer Moore,jennifer.moore57@example.com,29,Male,"Chicago, IL",80-120k,Yes,6,143.42,Upper,46.21,Yes,Amazon Prime,48,16,Peacock,Sunday,5,654.96,Jerseys,Kansas City Chiefs,Low,No,No,15
+FAN00058,Jessica Garcia,jessica.garcia58@example.com,28,Female,"Los Angeles, CA",<40k,No,8,173.61,Upper,45.96,Yes,Fox,168,5,Amazon Prime,Sunday,1,60.42,Jerseys,Seattle Seahawks,High,Yes,No,80
+FAN00059,Michael Davis,michael.davis59@example.com,63,Female,"Miami, FL",<40k,No,9,61.85,Upper,58.17,No,ESPN,61,11,YouTube TV,Sunday,1,61.46,Home Décor,Philadelphia Eagles,Medium,Yes,Yes,46
+FAN00060,Olivia Davis,olivia.davis60@example.com,28,Female,"Denver, CO",120k+,No,5,244.87,Club,78.55,No,NBC,132,8,NFL+,Sunday,4,1196.9,Home Décor,Dallas Cowboys,Medium,Yes,Yes,70
+FAN00061,Ashley Smith,ashley.smith61@example.com,19,Male,"Boston, MA",40-80k,Yes,9,164.73,Lower,71.04,Yes,CBS,93,7,Peacock,Sunday,3,33.0,Caps,Buffalo Bills,Medium,No,Yes,78
+FAN00062,Daniel Johnson,daniel.johnson62@example.com,29,Female,"Los Angeles, CA",80-120k,No,5,248.54,Lower,46.66,Yes,ESPN,150,13,Peacock,Monday,4,681.04,Collectibles,Buffalo Bills,High,No,Yes,71
+FAN00063,James Brown,james.brown63@example.com,62,Female,"Miami, FL",<40k,No,8,152.66,Upper,49.53,Yes,NBC,79,14,NFL+,Monday,1,263.48,Caps,San Francisco 49ers,Medium,Yes,No,57
+FAN00064,Jessica Jones,jessica.jones64@example.com,21,Male,"Dallas, TX",80-120k,No,1,258.19,Lower,56.84,No,Fox,159,11,Peacock,Sunday,5,502.91,Collectibles,Dallas Cowboys,Medium,Yes,No,75
+FAN00065,Jennifer Miller,jennifer.miller65@example.com,59,Female,"Denver, CO",<40k,No,6,176.28,Lower,26.45,Yes,ESPN,72,1,Peacock,Sunday,1,72.39,Home Décor,Seattle Seahawks,Medium,Yes,Yes,53
+FAN00066,Michael Taylor,michael.taylor66@example.com,20,Male,"New York, NY",40-80k,Yes,5,93.02,Lower,26.73,Yes,Amazon Prime,93,16,YouTube TV,Sunday,4,179.51,Collectibles,Kansas City Chiefs,Low,Yes,Yes,14
+FAN00067,David Brown,david.brown67@example.com,43,Female,"Los Angeles, CA",<40k,No,7,65.87,Club,63.02,Yes,ESPN,94,6,Peacock,Sunday,4,180.88,Caps,Kansas City Chiefs,Medium,Yes,Yes,53
+FAN00068,Jessica Johnson,jessica.johnson68@example.com,59,Female,"Philadelphia, PA",80-120k,Yes,0,149.23,Club,73.67,No,Fox,158,17,NFL+,Monday,1,313.01,Home Décor,Seattle Seahawks,Low,No,No,47
+FAN00069,John Williams,john.williams69@example.com,48,Male,"New York, NY",80-120k,No,8,190.9,Upper,21.33,Yes,NBC,112,1,None,Monday,4,590.74,Caps,Green Bay Packers,Medium,No,No,45
+FAN00070,Daniel Miller,daniel.miller70@example.com,36,Male,"Boston, MA",80-120k,No,2,187.62,Club,42.2,Yes,ESPN,79,11,Amazon Prime,Sunday,2,378.12,Caps,Buffalo Bills,Medium,Yes,No,40
+FAN00071,Mike Garcia,mike.garcia71@example.com,45,Female,"Boston, MA",<40k,No,1,94.36,Upper,65.08,Yes,Amazon Prime,151,15,None,Monday,1,152.08,Home Décor,Green Bay Packers,Medium,Yes,No,75
+FAN00072,Emma Williams,emma.williams72@example.com,51,Female,"Atlanta, GA",<40k,No,1,130.26,Lower,42.99,No,Fox,133,10,YouTube TV,Sunday,5,209.23,Collectibles,Pittsburgh Steelers,High,Yes,No,92
+FAN00073,Christopher Taylor,christopher.taylor73@example.com,73,Female,"Philadelphia, PA",120k+,No,11,345.06,Club,30.97,Yes,Fox,166,9,NFL+,Sunday,5,1708.99,Home Décor,New England Patriots,Low,Yes,No,22
+FAN00074,James Taylor,james.taylor74@example.com,42,Female,"New York, NY",<40k,Yes,0,131.1,Upper,27.49,Yes,NBC,55,9,NFL+,Sunday,5,180.71,Jerseys,Buffalo Bills,Low,No,Yes,44
+FAN00075,David Johnson,david.johnson75@example.com,20,Female,"Philadelphia, PA",40-80k,No,6,107.95,Upper,69.08,Yes,Amazon Prime,141,3,Peacock,Sunday,1,289.81,Collectibles,Philadelphia Eagles,Medium,Yes,Yes,58
+FAN00076,John Wilson,john.wilson76@example.com,19,Female,"Atlanta, GA",80-120k,Yes,5,132.59,Lower,18.66,Yes,ESPN,79,1,YouTube TV,Sunday,4,584.1,Caps,Kansas City Chiefs,Medium,No,No,42
+FAN00077,Daniel Miller,daniel.miller77@example.com,33,Female,"Boston, MA",40-80k,No,7,104.95,Upper,16.4,No,CBS,109,19,Amazon Prime,Monday,1,328.72,Jerseys,Philadelphia Eagles,Medium,Yes,Yes,47
+FAN00078,Jessica Smith,jessica.smith78@example.com,40,Female,"Boston, MA",<40k,No,1,96.82,Club,51.1,No,NBC,130,4,YouTube TV,Sunday,1,35.06,Caps,Philadelphia Eagles,Medium,No,Yes,50
+FAN00079,Olivia Taylor,olivia.taylor79@example.com,47,Male,"Dallas, TX",80-120k,Yes,3,145.43,Club,55.11,No,Fox,69,0,YouTube TV,Sunday,1,327.19,Caps,Philadelphia Eagles,Medium,No,Yes,74
+FAN00080,Sarah Martinez,sarah.martinez80@example.com,23,Male,"Los Angeles, CA",<40k,No,11,97.78,Upper,74.6,Yes,NBC,174,18,Peacock,Sunday,2,27.27,Caps,Buffalo Bills,Low,Yes,No,13
+FAN00081,Christopher Davis,christopher.davis81@example.com,32,Female,"New York, NY",120k+,No,6,271.75,Lower,31.02,Yes,CBS,96,19,YouTube TV,Sunday,2,713.37,Collectibles,San Francisco 49ers,Medium,No,Yes,46
+FAN00082,Christopher Williams,christopher.williams82@example.com,24,Male,"Miami, FL",40-80k,Yes,4,112.61,Upper,68.22,Yes,Amazon Prime,109,12,None,Monday,5,70.75,Jerseys,San Francisco 49ers,High,No,No,66
+FAN00083,Jessica Smith,jessica.smith83@example.com,52,Female,"Dallas, TX",<40k,No,8,133.99,Upper,57.99,No,Fox,65,9,None,Sunday,1,199.73,Home Décor,Buffalo Bills,Low,No,No,13
+FAN00084,Christopher Smith,christopher.smith84@example.com,27,Female,"Seattle, WA",120k+,Yes,0,275.92,VIP,19.67,Yes,NBC,113,11,NFL+,Sunday,5,1671.76,Home Décor,Buffalo Bills,Medium,Yes,No,47
+FAN00085,Sarah Davis,sarah.davis85@example.com,52,Other,"Chicago, IL",<40k,No,11,174.35,Upper,39.84,Yes,Amazon Prime,138,7,Amazon Prime,Sunday,4,295.0,Jerseys,Seattle Seahawks,Low,No,No,20
+FAN00086,Mike Johnson,mike.johnson86@example.com,20,Female,"Seattle, WA",<40k,Yes,4,129.95,Lower,79.42,Yes,CBS,55,9,NFL+,Thursday,1,309.85,Jerseys,Seattle Seahawks,Medium,Yes,Yes,49
+FAN00087,Daniel Johnson,daniel.johnson87@example.com,39,Male,"Boston, MA",<40k,No,11,170.68,Upper,79.32,Yes,Amazon Prime,170,7,YouTube TV,Sunday,3,270.39,Jerseys,Philadelphia Eagles,Low,Yes,No,30
+FAN00088,Mike Moore,mike.moore88@example.com,38,Male,"Miami, FL",80-120k,No,7,267.2,Lower,57.84,Yes,Amazon Prime,74,6,YouTube TV,Sunday,5,328.11,Collectibles,Seattle Seahawks,High,Yes,Yes,77
+FAN00089,John Wilson,john.wilson89@example.com,22,Female,"Boston, MA",80-120k,No,1,170.02,Club,39.88,No,CBS,130,9,Amazon Prime,Monday,4,316.37,Jerseys,Buffalo Bills,Medium,No,Yes,64
+FAN00090,Michael Williams,michael.williams90@example.com,48,Female,"Philadelphia, PA",40-80k,No,4,163.96,Upper,61.41,Yes,Amazon Prime,82,13,YouTube TV,Sunday,5,398.53,Home Décor,Dallas Cowboys,Medium,Yes,Yes,59
+FAN00091,Jennifer Williams,jennifer.williams91@example.com,41,Female,"Chicago, IL",<40k,No,2,79.31,Upper,19.1,Yes,Fox,161,3,Peacock,Sunday,4,281.18,Caps,Pittsburgh Steelers,Medium,Yes,Yes,69
+FAN00092,Jessica Smith,jessica.smith92@example.com,45,Female,"Philadelphia, PA",80-120k,No,11,299.7,Club,41.87,Yes,Amazon Prime,105,9,Amazon Prime,Sunday,3,759.87,Jerseys,Philadelphia Eagles,Medium,Yes,Yes,43
+FAN00093,Christopher Williams,christopher.williams93@example.com,70,Female,"Atlanta, GA",<40k,No,3,160.85,Upper,24.34,Yes,Fox,173,3,NFL+,Sunday,4,90.22,Home Décor,Buffalo Bills,Medium,No,No,59
+FAN00094,Jessica Jones,jessica.jones94@example.com,47,Male,"Philadelphia, PA",<40k,No,8,55.8,Upper,69.37,Yes,Amazon Prime,151,19,Amazon Prime,Thursday,1,14.52,Jerseys,Kansas City Chiefs,Low,Yes,No,23
+FAN00095,Emma Johnson,emma.johnson95@example.com,49,Female,"Atlanta, GA",80-120k,No,4,293.41,VIP,60.79,Yes,ESPN,159,11,NFL+,Sunday,1,536.1,Caps,San Francisco 49ers,Low,Yes,Yes,23
+FAN00096,James Garcia,james.garcia96@example.com,72,Female,"New York, NY",40-80k,No,5,177.47,Upper,74.28,Yes,Amazon Prime,46,15,NFL+,Sunday,2,90.96,Home Décor,Green Bay Packers,Medium,Yes,Yes,78
+FAN00097,Olivia Davis,olivia.davis97@example.com,55,Female,"Atlanta, GA",80-120k,Yes,3,202.66,Club,51.36,Yes,Amazon Prime,123,19,YouTube TV,Sunday,5,231.17,Jerseys,Seattle Seahawks,Low,No,No,16
+FAN00098,Mike Martinez,mike.martinez98@example.com,73,Female,"Dallas, TX",40-80k,Yes,4,168.2,Upper,82.51,Yes,Fox,52,8,YouTube TV,Sunday,1,215.48,Collectibles,Seattle Seahawks,Low,Yes,Yes,32
+FAN00099,Emma Wilson,emma.wilson99@example.com,19,Female,"Boston, MA",40-80k,Yes,4,161.43,Upper,66.28,No,Amazon Prime,48,5,Peacock,Monday,4,362.46,Collectibles,Pittsburgh Steelers,High,No,Yes,97
+FAN00100,James Jones,james.jones100@example.com,38,Female,"Chicago, IL",80-120k,No,8,178.14,VIP,72.61,Yes,Amazon Prime,53,19,Amazon Prime,Sunday,4,798.25,Home Décor,Buffalo Bills,Medium,Yes,No,66
+FAN00101,Ashley Martinez,ashley.martinez101@example.com,38,Female,"New York, NY",<40k,Yes,3,156.5,Upper,78.38,No,Fox,102,10,NFL+,Sunday,1,351.93,Jerseys,Green Bay Packers,Low,Yes,No,37
+FAN00102,Mike Johnson,mike.johnson102@example.com,52,Male,"Chicago, IL",80-120k,No,8,132.54,Club,30.09,Yes,Amazon Prime,101,13,YouTube TV,Thursday,4,304.93,Jerseys,Pittsburgh Steelers,Low,No,Yes,17
+FAN00103,Mike Williams,mike.williams103@example.com,50,Female,"Seattle, WA",80-120k,Yes,2,120.03,Lower,83.38,Yes,CBS,157,7,Amazon Prime,Thursday,1,301.45,Collectibles,Green Bay Packers,Medium,No,No,53
+FAN00104,Ashley Brown,ashley.brown104@example.com,62,Male,"Miami, FL",120k+,No,7,418.0,VIP,33.43,Yes,ESPN,164,19,NFL+,Monday,5,957.13,Collectibles,Buffalo Bills,Low,Yes,No,23
+FAN00105,Jessica Anderson,jessica.anderson105@example.com,21,Male,"New York, NY",80-120k,Yes,11,277.91,Lower,55.8,No,Fox,113,15,YouTube TV,Sunday,4,398.24,Jerseys,San Francisco 49ers,High,Yes,No,80
+FAN00106,Jessica Williams,jessica.williams106@example.com,34,Male,"Denver, CO",<40k,Yes,3,174.26,Lower,46.04,Yes,NBC,82,19,NFL+,Monday,4,10.06,Collectibles,Pittsburgh Steelers,Low,Yes,Yes,21
+FAN00107,Ashley Moore,ashley.moore107@example.com,20,Male,"Philadelphia, PA",80-120k,Yes,0,291.1,Club,17.78,Yes,NBC,168,9,NFL+,Sunday,5,560.39,Jerseys,Green Bay Packers,Medium,Yes,No,62
+FAN00108,Christopher Brown,christopher.brown108@example.com,73,Male,"Atlanta, GA",40-80k,No,4,119.81,Upper,55.04,Yes,NBC,98,8,NFL+,Monday,1,341.65,Jerseys,Dallas Cowboys,High,Yes,Yes,84
+FAN00109,James Miller,james.miller109@example.com,58,Male,"Chicago, IL",<40k,No,7,137.8,Upper,61.97,Yes,Amazon Prime,89,6,YouTube TV,Monday,1,17.94,Collectibles,Pittsburgh Steelers,High,Yes,No,65
+FAN00110,John Brown,john.brown110@example.com,35,Female,"New York, NY",<40k,Yes,9,136.49,Lower,37.48,No,Fox,73,8,Amazon Prime,Sunday,3,320.14,Jerseys,Chicago Bears,Low,Yes,Yes,37
+FAN00111,Daniel Martinez,daniel.martinez111@example.com,56,Other,"Dallas, TX",80-120k,Yes,11,250.32,VIP,35.65,Yes,Amazon Prime,145,16,NFL+,Monday,1,272.34,Caps,San Francisco 49ers,Low,Yes,Yes,25
+FAN00112,Sarah Moore,sarah.moore112@example.com,72,Female,"Denver, CO",40-80k,No,7,162.03,Upper,77.28,Yes,NBC,101,3,YouTube TV,Sunday,2,236.11,Home Décor,San Francisco 49ers,Medium,Yes,Yes,42
+FAN00113,John Smith,john.smith113@example.com,64,Female,"New York, NY",<40k,Yes,4,53.31,Lower,52.18,No,CBS,109,3,NFL+,Sunday,5,258.33,Caps,Seattle Seahawks,Medium,No,Yes,70
+FAN00114,Christopher Brown,christopher.brown114@example.com,43,Female,"Atlanta, GA",<40k,No,4,54.02,Upper,81.91,Yes,CBS,62,8,NFL+,Sunday,3,155.19,Collectibles,Kansas City Chiefs,Low,Yes,No,24
+FAN00115,Emma Brown,emma.brown115@example.com,22,Male,"Chicago, IL",<40k,Yes,4,121.98,Lower,38.97,Yes,CBS,147,3,Peacock,Sunday,5,216.68,Collectibles,New England Patriots,High,Yes,Yes,67
+FAN00116,John Williams,john.williams116@example.com,35,Female,"Miami, FL",40-80k,No,2,124.02,Upper,24.27,Yes,Fox,55,12,YouTube TV,Sunday,3,248.26,Collectibles,San Francisco 49ers,Medium,No,Yes,67
+FAN00117,Jennifer Taylor,jennifer.taylor117@example.com,29,Female,"Atlanta, GA",120k+,No,10,484.73,Upper,29.23,No,NBC,126,18,YouTube TV,Monday,3,1269.35,Home Décor,Buffalo Bills,Medium,Yes,Yes,45
+FAN00118,John Smith,john.smith118@example.com,50,Female,"Dallas, TX",80-120k,No,5,131.24,Lower,65.59,No,Fox,108,15,YouTube TV,Monday,3,730.08,Home Décor,Buffalo Bills,Medium,No,No,70
+FAN00119,Mike Davis,mike.davis119@example.com,43,Male,"Seattle, WA",80-120k,No,11,173.03,Club,61.1,No,CBS,79,1,NFL+,Monday,4,208.59,Caps,Philadelphia Eagles,High,Yes,Yes,65
+FAN00120,Jennifer Wilson,jennifer.wilson120@example.com,30,Male,"Dallas, TX",120k+,No,5,221.69,Club,18.52,Yes,Amazon Prime,155,1,Peacock,Monday,3,1932.67,Caps,Pittsburgh Steelers,Low,Yes,Yes,49
+FAN00121,Daniel Jones,daniel.jones121@example.com,30,Female,"Atlanta, GA",40-80k,No,7,96.52,Upper,53.83,Yes,Fox,58,17,YouTube TV,Sunday,5,259.13,Home Décor,Philadelphia Eagles,High,Yes,Yes,87
+FAN00122,Michael Miller,michael.miller122@example.com,25,Male,"New York, NY",<40k,Yes,0,114.57,Upper,50.78,Yes,ESPN,131,17,NFL+,Sunday,4,113.71,Jerseys,Buffalo Bills,Medium,Yes,Yes,50
+FAN00123,Michael Johnson,michael.johnson123@example.com,61,Female,"New York, NY",40-80k,No,9,167.94,Upper,54.52,No,ESPN,164,9,None,Monday,5,377.19,Jerseys,Dallas Cowboys,Medium,Yes,Yes,51
+FAN00124,Jessica Martinez,jessica.martinez124@example.com,47,Female,"Denver, CO",<40k,No,1,111.8,VIP,59.41,No,ESPN,168,6,NFL+,Sunday,5,253.74,Jerseys,Kansas City Chiefs,Low,No,Yes,48
+FAN00125,Daniel Garcia,daniel.garcia125@example.com,28,Male,"Boston, MA",80-120k,Yes,2,236.59,Club,37.09,Yes,Amazon Prime,72,7,NFL+,Monday,4,677.74,Collectibles,Green Bay Packers,Low,Yes,No,18
+FAN00126,Emma Taylor,emma.taylor126@example.com,70,Female,"Atlanta, GA",<40k,Yes,2,158.61,Upper,43.3,Yes,CBS,68,10,NFL+,Thursday,4,5.88,Caps,Philadelphia Eagles,Medium,No,Yes,61
+FAN00127,John Davis,john.davis127@example.com,45,Male,"Boston, MA",120k+,Yes,4,237.67,Club,38.93,No,CBS,101,11,Peacock,Sunday,5,525.42,Collectibles,Kansas City Chiefs,High,No,Yes,98
+FAN00128,Michael Davis,michael.davis128@example.com,50,Male,"Dallas, TX",40-80k,No,11,87.85,Upper,48.17,Yes,Fox,148,8,None,Sunday,4,82.84,Caps,Philadelphia Eagles,High,Yes,Yes,93
+FAN00129,Ashley Miller,ashley.miller129@example.com,59,Female,"New York, NY",80-120k,Yes,3,272.49,Lower,38.61,No,ESPN,91,8,Amazon Prime,Sunday,2,389.09,Jerseys,Kansas City Chiefs,High,Yes,Yes,72
+FAN00130,Emma Smith,emma.smith130@example.com,67,Male,"Philadelphia, PA",40-80k,No,9,148.94,Club,27.62,Yes,NBC,50,7,YouTube TV,Monday,4,141.71,Jerseys,Dallas Cowboys,High,No,No,70
+FAN00131,Michael Wilson,michael.wilson131@example.com,61,Female,"Miami, FL",120k+,No,2,259.08,VIP,27.33,Yes,Fox,178,3,YouTube TV,Monday,3,1927.14,Jerseys,New England Patriots,Medium,Yes,Yes,65
+FAN00132,Mike Johnson,mike.johnson132@example.com,72,Female,"Los Angeles, CA",40-80k,No,5,161.05,Upper,74.86,Yes,Amazon Prime,118,3,None,Sunday,4,309.24,Caps,San Francisco 49ers,Low,Yes,Yes,48
+FAN00133,Mike Miller,mike.miller133@example.com,25,Female,"Philadelphia, PA",80-120k,No,10,165.69,Lower,81.84,Yes,ESPN,137,6,NFL+,Sunday,4,347.48,Jerseys,Green Bay Packers,High,Yes,Yes,74
+FAN00134,Sophia Smith,sophia.smith134@example.com,35,Male,"Los Angeles, CA",120k+,Yes,9,315.9,Club,73.79,No,Amazon Prime,166,0,NFL+,Sunday,5,1360.76,Jerseys,Kansas City Chiefs,High,Yes,Yes,65
+FAN00135,Sarah Jones,sarah.jones135@example.com,52,Female,"Miami, FL",40-80k,No,6,159.16,Upper,48.34,Yes,CBS,153,7,NFL+,Sunday,4,57.53,Caps,Buffalo Bills,High,Yes,Yes,90
+FAN00136,Sarah Jones,sarah.jones136@example.com,18,Male,"Los Angeles, CA",40-80k,Yes,8,155.41,Upper,47.43,Yes,CBS,67,12,None,Sunday,5,334.33,Caps,Buffalo Bills,Medium,Yes,Yes,63
+FAN00137,Emma Garcia,emma.garcia137@example.com,54,Female,"Philadelphia, PA",80-120k,No,3,156.1,Upper,66.93,No,Fox,94,4,NFL+,Sunday,3,322.15,Caps,Buffalo Bills,Medium,Yes,No,61
+FAN00138,Emma Brown,emma.brown138@example.com,56,Female,"Dallas, TX",<40k,No,8,149.12,Upper,33.82,Yes,ESPN,61,3,YouTube TV,Sunday,3,216.99,Jerseys,San Francisco 49ers,Medium,Yes,Yes,70
+FAN00139,Daniel Williams,daniel.williams139@example.com,53,Female,"Boston, MA",120k+,Yes,8,334.64,Lower,34.19,No,Amazon Prime,117,12,YouTube TV,Thursday,3,738.54,Jerseys,Dallas Cowboys,Low,Yes,Yes,15
+FAN00140,James Smith,james.smith140@example.com,34,Female,"Chicago, IL",40-80k,Yes,9,71.19,Lower,58.11,No,CBS,103,18,NFL+,Sunday,3,314.48,Jerseys,Dallas Cowboys,Medium,Yes,Yes,58
+FAN00141,Olivia Moore,olivia.moore141@example.com,65,Female,"Boston, MA",80-120k,Yes,5,219.49,Upper,62.09,No,NBC,158,15,Peacock,Sunday,4,437.93,Home Décor,Seattle Seahawks,High,Yes,Yes,84
+FAN00142,Jennifer Jones,jennifer.jones142@example.com,28,Male,"New York, NY",<40k,Yes,8,103.52,Upper,62.98,Yes,Fox,91,6,YouTube TV,Thursday,4,374.0,Caps,Pittsburgh Steelers,High,Yes,Yes,69
+FAN00143,Sarah Garcia,sarah.garcia143@example.com,46,Male,"Atlanta, GA",<40k,Yes,5,86.12,Upper,53.34,No,ESPN,126,19,NFL+,Sunday,1,110.53,Home Décor,Pittsburgh Steelers,High,Yes,Yes,90
+FAN00144,Daniel Williams,daniel.williams144@example.com,33,Male,"Philadelphia, PA",40-80k,Yes,8,121.45,Upper,21.44,Yes,CBS,155,1,None,Sunday,3,275.91,Caps,Chicago Bears,Medium,Yes,No,66
+FAN00145,Emma Martinez,emma.martinez145@example.com,53,Male,"Chicago, IL",<40k,No,10,50.26,Upper,69.06,Yes,ESPN,72,0,NFL+,Sunday,1,69.63,Jerseys,Kansas City Chiefs,Medium,No,Yes,54
+FAN00146,Daniel Moore,daniel.moore146@example.com,63,Female,"Miami, FL",<40k,No,11,137.42,Upper,75.29,No,NBC,117,18,YouTube TV,Sunday,1,390.8,Jerseys,Chicago Bears,Low,Yes,Yes,44
+FAN00147,James Smith,james.smith147@example.com,70,Male,"Dallas, TX",80-120k,Yes,1,252.97,Lower,66.29,Yes,NBC,60,17,Amazon Prime,Monday,3,208.25,Home Décor,Seattle Seahawks,Low,Yes,No,14
+FAN00148,John Miller,john.miller148@example.com,73,Male,"New York, NY",120k+,No,8,287.45,Club,17.45,No,Fox,102,10,Peacock,Monday,2,1656.11,Home Décor,Kansas City Chiefs,Low,Yes,Yes,34
+FAN00149,Ashley Johnson,ashley.johnson149@example.com,51,Male,"Philadelphia, PA",40-80k,Yes,11,152.06,Upper,22.38,No,Fox,165,0,None,Sunday,5,239.54,Jerseys,Chicago Bears,Medium,No,No,46
+FAN00150,Sarah Moore,sarah.moore150@example.com,64,Male,"Atlanta, GA",80-120k,No,8,139.88,Lower,72.97,Yes,Amazon Prime,80,13,Amazon Prime,Sunday,2,373.51,Collectibles,Dallas Cowboys,Low,Yes,No,32
+FAN00151,Emma Williams,emma.williams151@example.com,62,Male,"Denver, CO",40-80k,Yes,8,75.2,Lower,26.23,No,Amazon Prime,90,19,None,Sunday,5,343.53,Caps,San Francisco 49ers,High,Yes,Yes,87
+FAN00152,Emma Garcia,emma.garcia152@example.com,50,Male,"Atlanta, GA",40-80k,No,6,103.85,Lower,19.04,Yes,NBC,162,14,YouTube TV,Sunday,3,292.97,Jerseys,Buffalo Bills,Low,Yes,Yes,45
+FAN00153,Sarah Williams,sarah.williams153@example.com,27,Female,"New York, NY",40-80k,No,6,147.97,Upper,25.0,No,Amazon Prime,113,16,Peacock,Sunday,1,81.47,Collectibles,San Francisco 49ers,Medium,No,No,40
+FAN00154,Michael Martinez,michael.martinez154@example.com,20,Female,"Seattle, WA",40-80k,No,8,131.7,Upper,76.19,Yes,CBS,162,8,None,Sunday,2,275.45,Jerseys,Green Bay Packers,Low,Yes,Yes,37
+FAN00155,Daniel Davis,daniel.davis155@example.com,35,Other,"Los Angeles, CA",120k+,No,1,261.04,VIP,41.28,No,CBS,167,9,None,Sunday,3,600.46,Caps,Seattle Seahawks,Medium,Yes,Yes,79
+FAN00156,Michael Wilson,michael.wilson156@example.com,69,Male,"Dallas, TX",<40k,No,8,95.49,Upper,55.67,Yes,Fox,145,15,None,Sunday,2,371.72,Home Décor,Dallas Cowboys,High,Yes,Yes,73
+FAN00157,Ashley Moore,ashley.moore157@example.com,24,Female,"Atlanta, GA",80-120k,No,4,182.45,Upper,52.92,No,CBS,57,10,Peacock,Sunday,5,434.45,Collectibles,New England Patriots,Low,Yes,No,40
+FAN00158,Ashley Anderson,ashley.anderson158@example.com,32,Male,"Philadelphia, PA",40-80k,No,2,126.01,Upper,80.73,Yes,ESPN,166,13,None,Sunday,2,53.46,Collectibles,San Francisco 49ers,Medium,No,No,71
+FAN00159,James Miller,james.miller159@example.com,23,Male,"Philadelphia, PA",80-120k,No,2,259.26,Upper,72.7,Yes,Fox,178,13,Peacock,Sunday,5,648.7,Collectibles,Seattle Seahawks,Low,Yes,Yes,46
+FAN00160,Olivia Anderson,olivia.anderson160@example.com,50,Female,"Atlanta, GA",40-80k,Yes,10,58.74,VIP,31.9,Yes,Amazon Prime,57,16,Peacock,Sunday,3,37.97,Jerseys,Green Bay Packers,Medium,Yes,Yes,70
+FAN00161,Ashley Jones,ashley.jones161@example.com,52,Female,"Atlanta, GA",<40k,No,4,52.23,Lower,75.51,Yes,ESPN,112,18,Peacock,Sunday,5,366.64,Collectibles,Buffalo Bills,Medium,Yes,Yes,54
+FAN00162,Olivia Anderson,olivia.anderson162@example.com,63,Female,"Atlanta, GA",40-80k,No,8,130.41,Upper,50.28,No,Amazon Prime,99,17,Peacock,Sunday,5,253.23,Collectibles,Buffalo Bills,Medium,Yes,No,43
+FAN00163,Emma Taylor,emma.taylor163@example.com,39,Female,"New York, NY",<40k,No,1,132.67,Upper,16.34,No,NBC,87,14,YouTube TV,Sunday,4,239.72,Caps,Philadelphia Eagles,Medium,Yes,Yes,61
+FAN00164,Jennifer Moore,jennifer.moore164@example.com,30,Female,"Los Angeles, CA",40-80k,Yes,7,158.39,Upper,31.16,No,CBS,160,15,Peacock,Sunday,5,257.03,Collectibles,Seattle Seahawks,Medium,Yes,No,79
+FAN00165,Olivia Martinez,olivia.martinez165@example.com,52,Female,"Los Angeles, CA",<40k,Yes,4,78.11,Lower,83.27,No,Fox,138,18,Peacock,Monday,4,276.48,Caps,New England Patriots,Medium,Yes,Yes,54
+FAN00166,Olivia Taylor,olivia.taylor166@example.com,49,Female,"Seattle, WA",<40k,Yes,7,69.15,Lower,24.08,Yes,ESPN,169,12,YouTube TV,Sunday,4,389.23,Collectibles,New England Patriots,High,Yes,No,87
+FAN00167,Olivia Miller,olivia.miller167@example.com,39,Female,"Seattle, WA",40-80k,No,11,89.31,Lower,49.15,Yes,Fox,101,9,None,Sunday,1,225.36,Caps,Buffalo Bills,Low,Yes,No,47
+FAN00168,Olivia Smith,olivia.smith168@example.com,32,Male,"Miami, FL",<40k,No,8,55.84,Upper,49.48,Yes,NBC,115,2,Amazon Prime,Sunday,4,50.54,Collectibles,Buffalo Bills,Medium,Yes,No,79
+FAN00169,Christopher Smith,christopher.smith169@example.com,66,Other,"Seattle, WA",<40k,No,10,123.8,Upper,24.89,Yes,CBS,97,2,YouTube TV,Sunday,2,231.73,Home Décor,Philadelphia Eagles,Medium,Yes,Yes,43
+FAN00170,James Davis,james.davis170@example.com,74,Female,"Miami, FL",80-120k,Yes,8,165.5,Club,16.77,Yes,Amazon Prime,128,6,YouTube TV,Sunday,2,763.34,Caps,Dallas Cowboys,Medium,Yes,No,70
+FAN00171,Emma Brown,emma.brown171@example.com,50,Male,"Seattle, WA",40-80k,No,10,75.94,Upper,56.3,Yes,CBS,60,1,Amazon Prime,Sunday,5,117.58,Home Décor,New England Patriots,High,Yes,No,87
+FAN00172,Christopher Anderson,christopher.anderson172@example.com,38,Female,"Miami, FL",80-120k,Yes,3,128.18,Lower,34.49,No,ESPN,155,0,YouTube TV,Sunday,2,587.96,Home Décor,Buffalo Bills,Medium,Yes,Yes,49
+FAN00173,Christopher Martinez,christopher.martinez173@example.com,74,Female,"New York, NY",<40k,Yes,9,169.91,Lower,62.42,Yes,Fox,146,4,None,Monday,1,278.25,Jerseys,Green Bay Packers,Low,Yes,Yes,20
+FAN00174,David Williams,david.williams174@example.com,19,Male,"Philadelphia, PA",80-120k,No,2,287.98,Club,50.44,Yes,ESPN,87,3,Amazon Prime,Sunday,2,359.3,Home Décor,Dallas Cowboys,Medium,Yes,No,77
+FAN00175,Jennifer Williams,jennifer.williams175@example.com,52,Female,"Seattle, WA",<40k,No,1,90.71,Upper,80.0,Yes,ESPN,155,15,YouTube TV,Sunday,5,339.81,Jerseys,New England Patriots,High,Yes,Yes,97
+FAN00176,Emma Taylor,emma.taylor176@example.com,26,Male,"Chicago, IL",80-120k,Yes,4,255.7,VIP,32.46,No,Fox,128,11,YouTube TV,Sunday,1,546.73,Caps,Buffalo Bills,High,Yes,No,91
+FAN00177,David Martinez,david.martinez177@example.com,37,Female,"Los Angeles, CA",80-120k,No,8,141.58,Lower,26.51,Yes,Amazon Prime,114,16,Peacock,Sunday,4,640.96,Collectibles,New England Patriots,Low,Yes,No,24
+FAN00178,Olivia Miller,olivia.miller178@example.com,20,Male,"Miami, FL",40-80k,No,7,122.88,Upper,21.45,Yes,Amazon Prime,117,15,Amazon Prime,Monday,4,377.06,Collectibles,Pittsburgh Steelers,Low,Yes,Yes,14
+FAN00179,Christopher Moore,christopher.moore179@example.com,71,Male,"Los Angeles, CA",40-80k,Yes,0,153.16,Lower,47.06,Yes,ESPN,109,9,Amazon Prime,Monday,1,12.71,Caps,Philadelphia Eagles,Low,No,No,43
+FAN00180,Jennifer Smith,jennifer.smith180@example.com,34,Male,"Seattle, WA",40-80k,No,5,70.28,Upper,68.33,No,Amazon Prime,104,5,None,Thursday,1,333.84,Collectibles,Buffalo Bills,High,Yes,No,99
+FAN00181,Sophia Brown,sophia.brown181@example.com,23,Male,"Boston, MA",<40k,No,10,135.33,Upper,18.08,No,NBC,144,2,Amazon Prime,Monday,5,388.46,Jerseys,Dallas Cowboys,Medium,No,No,52
+FAN00182,Sarah Brown,sarah.brown182@example.com,30,Male,"Los Angeles, CA",40-80k,No,11,119.91,Upper,51.28,No,NBC,68,14,Peacock,Sunday,5,111.24,Caps,Seattle Seahawks,Low,Yes,Yes,49
+FAN00183,James Taylor,james.taylor183@example.com,74,Female,"Boston, MA",<40k,No,5,61.88,Upper,81.02,Yes,CBS,48,5,Amazon Prime,Monday,2,125.93,Home Décor,Buffalo Bills,Medium,Yes,Yes,78
+FAN00184,Olivia Anderson,olivia.anderson184@example.com,20,Male,"Philadelphia, PA",80-120k,No,2,248.31,Lower,81.27,Yes,NBC,47,8,YouTube TV,Sunday,1,618.02,Caps,Dallas Cowboys,Low,Yes,Yes,28
+FAN00185,Sophia Williams,sophia.williams185@example.com,64,Female,"Atlanta, GA",40-80k,Yes,9,114.6,Lower,38.84,No,ESPN,122,2,YouTube TV,Sunday,2,366.78,Collectibles,San Francisco 49ers,Low,No,No,34
+FAN00186,James Smith,james.smith186@example.com,19,Female,"Atlanta, GA",120k+,No,8,325.89,Upper,70.12,Yes,Fox,120,12,YouTube TV,Thursday,2,575.93,Caps,Seattle Seahawks,Medium,No,Yes,57
+FAN00187,Jennifer Davis,jennifer.davis187@example.com,29,Female,"Los Angeles, CA",40-80k,No,11,71.23,Upper,35.11,Yes,Fox,115,12,YouTube TV,Sunday,5,88.71,Jerseys,Green Bay Packers,Low,Yes,No,17
+FAN00188,Jessica Williams,jessica.williams188@example.com,30,Male,"Dallas, TX",40-80k,No,1,154.71,Upper,18.97,Yes,Amazon Prime,63,1,None,Sunday,5,304.06,Home Décor,Philadelphia Eagles,Low,Yes,Yes,15
+FAN00189,Daniel Miller,daniel.miller189@example.com,68,Male,"Miami, FL",40-80k,Yes,10,81.27,Lower,40.23,No,Amazon Prime,88,1,None,Thursday,2,268.95,Collectibles,Pittsburgh Steelers,Medium,Yes,Yes,43
+FAN00190,Sarah Martinez,sarah.martinez190@example.com,38,Female,"Seattle, WA",80-120k,No,6,172.1,Club,80.41,No,ESPN,163,3,Amazon Prime,Sunday,4,480.61,Collectibles,Dallas Cowboys,Medium,No,No,41
+FAN00191,John Wilson,john.wilson191@example.com,70,Male,"Chicago, IL",80-120k,Yes,9,165.54,Upper,77.27,No,ESPN,174,19,YouTube TV,Monday,5,719.34,Caps,Chicago Bears,Low,Yes,No,49
+FAN00192,Daniel Garcia,daniel.garcia192@example.com,59,Female,"Dallas, TX",<40k,Yes,8,134.56,Upper,80.02,Yes,CBS,134,8,Amazon Prime,Sunday,2,84.93,Home Décor,Kansas City Chiefs,Medium,Yes,No,66
+FAN00193,Sarah Wilson,sarah.wilson193@example.com,53,Female,"Los Angeles, CA",<40k,No,7,88.47,Club,40.39,Yes,Amazon Prime,172,11,YouTube TV,Thursday,5,265.53,Home Décor,Seattle Seahawks,Low,No,No,21
+FAN00194,Jessica Brown,jessica.brown194@example.com,35,Female,"Boston, MA",40-80k,Yes,5,82.97,Upper,62.92,No,Amazon Prime,90,14,YouTube TV,Thursday,4,302.53,Caps,San Francisco 49ers,High,Yes,Yes,85
+FAN00195,Olivia Anderson,olivia.anderson195@example.com,31,Female,"Los Angeles, CA",<40k,No,8,50.0,Upper,53.72,No,Fox,113,7,NFL+,Sunday,3,284.85,Collectibles,Philadelphia Eagles,Low,Yes,Yes,32
+FAN00196,Sophia Williams,sophia.williams196@example.com,37,Female,"Seattle, WA",40-80k,Yes,2,155.62,Upper,40.53,No,Amazon Prime,152,11,YouTube TV,Monday,1,130.78,Collectibles,Kansas City Chiefs,Medium,Yes,No,68
+FAN00197,Michael Moore,michael.moore197@example.com,60,Male,"Seattle, WA",<40k,Yes,9,53.34,Upper,51.65,Yes,NBC,121,8,YouTube TV,Sunday,3,113.82,Home Décor,Pittsburgh Steelers,Medium,Yes,No,61
+FAN00198,Michael Anderson,michael.anderson198@example.com,55,Female,"Seattle, WA",40-80k,No,3,85.33,Upper,66.12,Yes,NBC,147,3,NFL+,Monday,4,159.67,Collectibles,Green Bay Packers,Medium,No,Yes,67
+FAN00199,Olivia Martinez,olivia.martinez199@example.com,30,Male,"Philadelphia, PA",80-120k,No,6,246.38,Club,37.26,Yes,ESPN,70,18,NFL+,Sunday,3,398.81,Caps,Dallas Cowboys,Medium,Yes,Yes,46
+FAN00200,Jessica Moore,jessica.moore200@example.com,62,Male,"Denver, CO",<40k,No,5,164.83,Upper,24.47,Yes,Fox,179,15,None,Sunday,3,165.93,Home Décor,Dallas Cowboys,Medium,Yes,Yes,77
+FAN00201,Mike Brown,mike.brown201@example.com,34,Male,"Seattle, WA",40-80k,No,1,140.77,Upper,52.1,No,ESPN,60,2,Peacock,Sunday,4,85.97,Jerseys,Dallas Cowboys,Medium,Yes,Yes,74
+FAN00202,James Martinez,james.martinez202@example.com,21,Male,"Boston, MA",<40k,No,9,90.95,Club,84.14,Yes,CBS,130,18,None,Sunday,5,316.56,Caps,Buffalo Bills,Medium,No,Yes,65
+FAN00203,Ashley Garcia,ashley.garcia203@example.com,47,Female,"Boston, MA",<40k,No,5,177.73,Lower,23.9,Yes,Fox,152,10,YouTube TV,Sunday,4,34.45,Jerseys,New England Patriots,Low,No,Yes,24
+FAN00204,Ashley Garcia,ashley.garcia204@example.com,59,Male,"Chicago, IL",80-120k,No,8,227.74,VIP,16.47,No,Amazon Prime,86,9,Peacock,Sunday,5,448.48,Collectibles,Green Bay Packers,Medium,Yes,Yes,67
+FAN00205,Sarah Garcia,sarah.garcia205@example.com,29,Male,"Chicago, IL",40-80k,Yes,7,116.52,Upper,55.17,Yes,ESPN,104,13,None,Sunday,2,193.32,Jerseys,Philadelphia Eagles,High,Yes,No,84
+FAN00206,John Taylor,john.taylor206@example.com,60,Female,"Denver, CO",40-80k,Yes,6,109.06,Club,84.27,No,NBC,69,17,None,Sunday,4,180.63,Caps,Buffalo Bills,High,Yes,Yes,90
+FAN00207,Daniel Davis,daniel.davis207@example.com,49,Female,"Seattle, WA",<40k,Yes,4,93.6,Upper,21.79,Yes,Fox,110,9,None,Sunday,4,70.83,Collectibles,New England Patriots,High,Yes,No,72
+FAN00208,Sarah Williams,sarah.williams208@example.com,56,Male,"Philadelphia, PA",<40k,Yes,11,163.66,Upper,66.16,Yes,NBC,77,18,YouTube TV,Monday,5,332.25,Caps,Dallas Cowboys,Medium,No,No,61
+FAN00209,Sarah Davis,sarah.davis209@example.com,33,Male,"Seattle, WA",80-120k,Yes,6,231.35,Upper,55.03,Yes,Amazon Prime,109,5,Peacock,Sunday,3,541.13,Collectibles,Pittsburgh Steelers,Medium,Yes,No,74
+FAN00210,Mike Miller,mike.miller210@example.com,32,Male,"Boston, MA",<40k,No,3,111.33,Upper,63.95,Yes,Amazon Prime,153,7,None,Sunday,4,221.39,Jerseys,Philadelphia Eagles,Low,Yes,Yes,49
+FAN00211,Daniel Johnson,daniel.johnson211@example.com,42,Female,"Seattle, WA",40-80k,Yes,4,104.02,Upper,48.02,Yes,Fox,160,12,Peacock,Monday,4,363.21,Jerseys,Dallas Cowboys,Low,No,Yes,20
+FAN00212,Daniel Johnson,daniel.johnson212@example.com,46,Male,"Seattle, WA",80-120k,Yes,1,197.34,VIP,45.52,Yes,Amazon Prime,166,5,NFL+,Sunday,2,649.92,Caps,Buffalo Bills,Medium,Yes,Yes,58
+FAN00213,Jessica Moore,jessica.moore213@example.com,26,Male,"Chicago, IL",40-80k,No,4,100.37,Upper,47.1,Yes,Fox,155,1,None,Thursday,2,345.39,Jerseys,Chicago Bears,Low,Yes,Yes,26
+FAN00214,Sarah Martinez,sarah.martinez214@example.com,47,Male,"Seattle, WA",<40k,Yes,6,78.68,Lower,36.88,Yes,Amazon Prime,133,17,YouTube TV,Sunday,1,55.25,Jerseys,New England Patriots,Medium,No,Yes,51
+FAN00215,Ashley Taylor,ashley.taylor215@example.com,72,Male,"Chicago, IL",40-80k,No,7,90.58,Lower,72.76,No,CBS,79,13,NFL+,Sunday,4,170.99,Collectibles,Green Bay Packers,Medium,No,No,58
+FAN00216,Emma Davis,emma.davis216@example.com,68,Female,"Atlanta, GA",<40k,No,8,91.2,Lower,78.83,Yes,Amazon Prime,170,16,Peacock,Sunday,3,323.53,Caps,New England Patriots,Medium,Yes,Yes,52
+FAN00217,Christopher Williams,christopher.williams217@example.com,43,Female,"Boston, MA",<40k,Yes,0,138.74,Club,56.85,Yes,CBS,79,2,None,Sunday,3,94.25,Jerseys,Philadelphia Eagles,High,Yes,Yes,96
+FAN00218,Michael Anderson,michael.anderson218@example.com,59,Female,"Chicago, IL",40-80k,No,2,74.6,Upper,73.72,No,Amazon Prime,105,16,YouTube TV,Monday,2,288.15,Caps,Philadelphia Eagles,Medium,No,Yes,74
+FAN00219,Emma Anderson,emma.anderson219@example.com,32,Female,"Los Angeles, CA",80-120k,No,0,161.95,Club,18.93,Yes,ESPN,137,1,Amazon Prime,Sunday,5,617.11,Collectibles,Buffalo Bills,High,Yes,No,98
+FAN00220,Emma Johnson,emma.johnson220@example.com,34,Male,"Dallas, TX",40-80k,No,0,162.99,Upper,24.62,Yes,Fox,176,6,Amazon Prime,Monday,1,212.02,Collectibles,Buffalo Bills,Medium,Yes,No,61
+FAN00221,Sarah Martinez,sarah.martinez221@example.com,54,Female,"Boston, MA",<40k,No,10,104.43,Upper,19.73,No,ESPN,171,0,NFL+,Sunday,4,87.85,Jerseys,New England Patriots,High,Yes,No,86
+FAN00222,John Wilson,john.wilson222@example.com,59,Male,"Seattle, WA",<40k,No,0,54.63,Upper,46.09,No,Fox,123,17,Peacock,Sunday,2,397.73,Caps,Kansas City Chiefs,Low,No,Yes,33
+FAN00223,Sophia Miller,sophia.miller223@example.com,57,Female,"Denver, CO",<40k,Yes,11,151.73,Upper,81.78,Yes,CBS,116,0,NFL+,Sunday,3,354.6,Caps,Buffalo Bills,High,Yes,Yes,93
+FAN00224,Jennifer Moore,jennifer.moore224@example.com,39,Male,"Boston, MA",120k+,No,5,442.36,Club,37.43,Yes,NBC,100,18,NFL+,Sunday,3,1606.11,Caps,Dallas Cowboys,High,No,Yes,94
+FAN00225,David Smith,david.smith225@example.com,68,Female,"New York, NY",40-80k,No,10,145.92,Upper,16.01,No,CBS,115,11,Amazon Prime,Sunday,4,55.6,Caps,Pittsburgh Steelers,Medium,Yes,No,65
+FAN00226,Mike Moore,mike.moore226@example.com,34,Female,"Philadelphia, PA",40-80k,No,6,153.54,Lower,81.56,Yes,CBS,71,0,YouTube TV,Sunday,3,295.79,Jerseys,San Francisco 49ers,Low,Yes,No,15
+FAN00227,John Miller,john.miller227@example.com,55,Male,"Denver, CO",40-80k,No,2,150.78,Lower,72.82,No,NBC,179,8,NFL+,Sunday,4,137.04,Home Décor,Philadelphia Eagles,Low,Yes,Yes,43
+FAN00228,Mike Brown,mike.brown228@example.com,38,Female,"Denver, CO",40-80k,No,10,67.19,Upper,64.89,Yes,NBC,174,3,Amazon Prime,Monday,1,78.68,Collectibles,Philadelphia Eagles,Low,Yes,Yes,21
+FAN00229,Michael Taylor,michael.taylor229@example.com,42,Male,"Miami, FL",40-80k,No,8,81.3,Upper,32.19,No,CBS,125,16,None,Sunday,2,154.72,Collectibles,San Francisco 49ers,Low,Yes,No,42
+FAN00230,Olivia Taylor,olivia.taylor230@example.com,62,Female,"Los Angeles, CA",80-120k,No,3,251.2,Lower,55.82,Yes,CBS,53,12,Peacock,Sunday,5,380.88,Collectibles,Green Bay Packers,Low,Yes,Yes,23
+FAN00231,Sophia Taylor,sophia.taylor231@example.com,63,Male,"New York, NY",120k+,Yes,2,333.46,Lower,45.36,No,NBC,96,3,None,Sunday,4,1233.57,Home Décor,Seattle Seahawks,High,No,Yes,81
+FAN00232,John Martinez,john.martinez232@example.com,27,Male,"Denver, CO",<40k,Yes,9,100.37,Upper,29.28,Yes,Fox,165,12,YouTube TV,Sunday,4,233.37,Home Décor,Chicago Bears,Medium,No,Yes,59
+FAN00233,Jennifer Smith,jennifer.smith233@example.com,29,Male,"Los Angeles, CA",120k+,Yes,9,360.69,Club,83.41,Yes,ESPN,92,1,YouTube TV,Monday,3,1427.44,Collectibles,Seattle Seahawks,Medium,No,No,60
+FAN00234,Sarah Johnson,sarah.johnson234@example.com,61,Male,"Seattle, WA",40-80k,No,2,58.9,Upper,38.8,No,NBC,145,15,Peacock,Sunday,3,358.96,Caps,San Francisco 49ers,Medium,Yes,Yes,69
+FAN00235,Sarah Moore,sarah.moore235@example.com,23,Female,"Boston, MA",<40k,No,9,55.39,Upper,80.11,Yes,Fox,54,16,NFL+,Monday,3,128.83,Jerseys,Pittsburgh Steelers,High,Yes,Yes,88
+FAN00236,Sophia Jones,sophia.jones236@example.com,39,Male,"Chicago, IL",80-120k,No,8,224.88,Upper,57.17,Yes,Fox,168,3,Amazon Prime,Monday,4,274.46,Jerseys,Chicago Bears,Medium,Yes,No,45
+FAN00237,Emma Johnson,emma.johnson237@example.com,38,Male,"Philadelphia, PA",80-120k,No,11,144.63,Club,37.12,No,Fox,178,16,Peacock,Monday,3,241.83,Caps,Seattle Seahawks,Medium,No,Yes,48
+FAN00238,David Martinez,david.martinez238@example.com,56,Male,"Denver, CO",40-80k,No,9,105.79,Upper,55.38,Yes,Fox,101,19,None,Monday,1,29.96,Jerseys,New England Patriots,High,Yes,Yes,91
+FAN00239,Mike Brown,mike.brown239@example.com,52,Male,"Atlanta, GA",80-120k,No,0,182.32,Lower,82.64,No,CBS,57,7,NFL+,Sunday,3,592.27,Caps,San Francisco 49ers,Medium,Yes,Yes,69
+FAN00240,Michael Garcia,michael.garcia240@example.com,33,Male,"Philadelphia, PA",40-80k,Yes,2,170.2,Upper,74.64,Yes,Fox,120,1,Peacock,Monday,2,22.49,Jerseys,San Francisco 49ers,High,Yes,Yes,69
+FAN00241,David Miller,david.miller241@example.com,43,Female,"Miami, FL",80-120k,Yes,3,182.25,Club,58.65,Yes,Fox,150,6,YouTube TV,Sunday,4,221.13,Jerseys,Philadelphia Eagles,High,Yes,Yes,79
+FAN00242,Sophia Moore,sophia.moore242@example.com,54,Male,"Los Angeles, CA",120k+,No,4,335.08,Club,37.25,Yes,Fox,145,15,NFL+,Sunday,4,878.8,Jerseys,Philadelphia Eagles,High,Yes,No,77
+FAN00243,Sarah Jones,sarah.jones243@example.com,51,Male,"New York, NY",120k+,Yes,8,425.43,Club,68.57,No,Fox,165,14,None,Sunday,3,1912.0,Caps,Philadelphia Eagles,Medium,No,No,77
+FAN00244,Olivia Brown,olivia.brown244@example.com,42,Female,"Denver, CO",40-80k,Yes,8,81.07,Lower,56.51,Yes,Amazon Prime,72,9,YouTube TV,Sunday,2,251.55,Caps,Dallas Cowboys,High,Yes,Yes,99
+FAN00245,Michael Anderson,michael.anderson245@example.com,41,Male,"Denver, CO",40-80k,No,6,164.96,Upper,15.51,No,NBC,87,1,NFL+,Monday,1,60.7,Collectibles,Kansas City Chiefs,Medium,No,Yes,61
+FAN00246,Jennifer Brown,jennifer.brown246@example.com,20,Male,"Atlanta, GA",80-120k,No,4,134.98,Lower,19.35,No,Amazon Prime,81,12,Peacock,Sunday,2,717.78,Caps,Kansas City Chiefs,Low,Yes,No,30
+FAN00247,Christopher Wilson,christopher.wilson247@example.com,24,Female,"Boston, MA",<40k,No,9,59.79,Lower,32.83,Yes,NBC,136,16,None,Monday,1,150.34,Jerseys,Dallas Cowboys,Low,No,Yes,41
+FAN00248,Jessica Moore,jessica.moore248@example.com,57,Female,"New York, NY",40-80k,No,11,53.52,Upper,42.24,No,ESPN,115,15,YouTube TV,Sunday,1,313.4,Home Décor,San Francisco 49ers,Medium,Yes,Yes,72
+FAN00249,Emma Martinez,emma.martinez249@example.com,46,Male,"Philadelphia, PA",80-120k,Yes,3,247.62,Club,37.15,Yes,Amazon Prime,156,5,Peacock,Sunday,1,552.58,Collectibles,Buffalo Bills,Medium,Yes,No,79
+FAN00250,Sarah Davis,sarah.davis250@example.com,24,Male,"Los Angeles, CA",40-80k,No,4,129.33,Lower,84.68,Yes,NBC,125,6,YouTube TV,Sunday,4,376.95,Caps,Buffalo Bills,Low,No,Yes,11
+FAN00251,Olivia Moore,olivia.moore251@example.com,26,Male,"Seattle, WA",<40k,No,6,63.49,Upper,41.92,Yes,CBS,53,14,YouTube TV,Sunday,5,118.17,Collectibles,Philadelphia Eagles,Medium,No,Yes,57
+FAN00252,Jessica Smith,jessica.smith252@example.com,38,Male,"Dallas, TX",<40k,No,0,115.59,Upper,54.84,No,Fox,115,3,Amazon Prime,Sunday,3,104.34,Collectibles,Buffalo Bills,Medium,No,Yes,61
+FAN00253,Sarah Williams,sarah.williams253@example.com,35,Male,"Philadelphia, PA",<40k,Yes,3,95.25,Club,31.12,Yes,ESPN,45,6,NFL+,Sunday,2,358.22,Jerseys,New England Patriots,Medium,Yes,No,51
+FAN00254,James Johnson,james.johnson254@example.com,19,Female,"Boston, MA",40-80k,No,1,124.95,Upper,19.49,Yes,Fox,170,1,YouTube TV,Sunday,2,393.34,Jerseys,New England Patriots,Medium,Yes,No,70
+FAN00255,Emma Taylor,emma.taylor255@example.com,68,Male,"Seattle, WA",<40k,Yes,5,75.88,Lower,68.22,No,ESPN,65,5,YouTube TV,Monday,3,139.13,Collectibles,Kansas City Chiefs,Medium,Yes,Yes,43
+FAN00256,Emma Williams,emma.williams256@example.com,48,Female,"Seattle, WA",<40k,Yes,0,106.19,Lower,64.11,Yes,CBS,110,19,YouTube TV,Sunday,2,36.6,Caps,Pittsburgh Steelers,Low,No,No,15
+FAN00257,Ashley Davis,ashley.davis257@example.com,22,Male,"Seattle, WA",80-120k,No,2,297.73,Club,48.21,Yes,NBC,170,6,None,Sunday,2,335.1,Home Décor,New England Patriots,Medium,Yes,Yes,49
+FAN00258,Christopher Miller,christopher.miller258@example.com,62,Female,"Boston, MA",40-80k,No,10,73.63,Upper,26.45,Yes,Fox,128,14,YouTube TV,Sunday,5,201.65,Jerseys,Kansas City Chiefs,Low,Yes,No,34
+FAN00259,David Miller,david.miller259@example.com,35,Male,"Philadelphia, PA",40-80k,No,1,60.59,Upper,76.4,Yes,ESPN,103,4,YouTube TV,Monday,5,174.01,Home Décor,Seattle Seahawks,Medium,Yes,Yes,57
+FAN00260,Christopher Anderson,christopher.anderson260@example.com,43,Other,"Atlanta, GA",<40k,No,2,67.64,Upper,66.51,Yes,Amazon Prime,83,3,Peacock,Monday,5,104.02,Home Décor,Dallas Cowboys,High,No,Yes,98
+FAN00261,John Jones,john.jones261@example.com,56,Female,"Chicago, IL",120k+,No,6,492.68,VIP,68.75,No,CBS,95,1,Amazon Prime,Sunday,5,597.92,Home Décor,Chicago Bears,Medium,Yes,Yes,40
+FAN00262,Ashley Garcia,ashley.garcia262@example.com,48,Male,"Atlanta, GA",40-80k,No,9,90.51,Upper,65.07,Yes,Amazon Prime,59,15,NFL+,Sunday,3,210.13,Home Décor,Seattle Seahawks,High,No,Yes,67
+FAN00263,Mike Garcia,mike.garcia263@example.com,44,Male,"Boston, MA",80-120k,Yes,4,164.04,Club,32.8,Yes,Amazon Prime,64,7,Amazon Prime,Sunday,2,452.78,Jerseys,Buffalo Bills,High,Yes,No,72
+FAN00264,Christopher Garcia,christopher.garcia264@example.com,33,Male,"Philadelphia, PA",80-120k,Yes,4,154.1,VIP,37.87,Yes,NBC,134,18,NFL+,Sunday,4,440.69,Home Décor,Pittsburgh Steelers,Medium,Yes,No,68
+FAN00265,Sophia Brown,sophia.brown265@example.com,58,Female,"Denver, CO",<40k,Yes,2,66.88,Lower,57.16,Yes,Amazon Prime,110,17,Amazon Prime,Sunday,5,270.48,Home Décor,Pittsburgh Steelers,High,No,Yes,74
+FAN00266,John Smith,john.smith266@example.com,18,Male,"Atlanta, GA",<40k,No,7,174.01,Lower,25.1,No,CBS,60,16,Peacock,Sunday,1,83.97,Caps,Dallas Cowboys,Medium,No,Yes,63
+FAN00267,Michael Jones,michael.jones267@example.com,52,Male,"Chicago, IL",<40k,Yes,0,50.3,Club,77.71,Yes,Fox,171,6,YouTube TV,Sunday,5,393.57,Home Décor,Dallas Cowboys,Low,Yes,Yes,16
+FAN00268,Jennifer Garcia,jennifer.garcia268@example.com,53,Male,"Los Angeles, CA",<40k,No,3,63.61,Lower,26.68,No,Amazon Prime,66,1,None,Sunday,4,169.18,Collectibles,Pittsburgh Steelers,Low,Yes,Yes,31
+FAN00269,John Wilson,john.wilson269@example.com,48,Other,"Chicago, IL",<40k,Yes,9,105.22,Upper,32.05,No,NBC,85,18,Peacock,Thursday,4,136.7,Home Décor,Pittsburgh Steelers,Low,Yes,Yes,23
+FAN00270,David Smith,david.smith270@example.com,59,Male,"Denver, CO",40-80k,Yes,1,172.26,Upper,65.47,Yes,Fox,123,3,Amazon Prime,Sunday,1,381.13,Home Décor,Pittsburgh Steelers,Medium,Yes,No,75
+FAN00271,Sarah Johnson,sarah.johnson271@example.com,59,Female,"Los Angeles, CA",<40k,No,0,52.2,Upper,82.58,No,CBS,142,11,None,Sunday,5,363.83,Jerseys,Chicago Bears,High,Yes,Yes,89
+FAN00272,Jennifer Johnson,jennifer.johnson272@example.com,29,Female,"Denver, CO",80-120k,No,6,156.68,Upper,84.03,No,ESPN,174,8,YouTube TV,Sunday,4,356.4,Collectibles,New England Patriots,Medium,Yes,Yes,42
+FAN00273,David Taylor,david.taylor273@example.com,59,Male,"Philadelphia, PA",80-120k,No,2,251.74,Lower,48.22,No,Amazon Prime,87,16,Amazon Prime,Monday,4,304.38,Caps,Pittsburgh Steelers,Medium,No,Yes,46
+FAN00274,Jessica Davis,jessica.davis274@example.com,69,Female,"Denver, CO",<40k,No,2,163.56,Upper,74.61,No,Amazon Prime,119,14,Peacock,Sunday,2,94.59,Collectibles,Green Bay Packers,Medium,Yes,Yes,69
+FAN00275,James Wilson,james.wilson275@example.com,58,Male,"Miami, FL",<40k,No,4,164.14,VIP,73.1,Yes,Amazon Prime,151,0,Peacock,Monday,5,107.68,Caps,Chicago Bears,Medium,Yes,No,71
+FAN00276,Sophia Smith,sophia.smith276@example.com,66,Female,"Atlanta, GA",40-80k,Yes,9,169.18,Upper,79.04,Yes,Fox,143,13,Peacock,Sunday,2,320.33,Jerseys,San Francisco 49ers,Medium,Yes,No,66
+FAN00277,Michael Martinez,michael.martinez277@example.com,32,Male,"Seattle, WA",40-80k,No,6,160.91,Club,34.98,Yes,NBC,147,8,YouTube TV,Thursday,3,373.43,Collectibles,Buffalo Bills,Low,Yes,No,12
+FAN00278,Michael Wilson,michael.wilson278@example.com,46,Female,"Boston, MA",80-120k,No,2,134.15,Lower,59.47,Yes,Fox,87,15,Amazon Prime,Sunday,3,398.55,Caps,Seattle Seahawks,High,Yes,No,99
+FAN00279,Sarah Davis,sarah.davis279@example.com,43,Female,"Philadelphia, PA",120k+,No,8,395.03,Upper,23.1,No,NBC,88,3,YouTube TV,Monday,3,1613.03,Home Décor,Chicago Bears,Low,No,No,35
+FAN00280,Ashley Johnson,ashley.johnson280@example.com,73,Male,"Seattle, WA",40-80k,No,6,175.87,Club,60.16,Yes,CBS,75,10,NFL+,Sunday,1,59.14,Collectibles,Green Bay Packers,Low,Yes,Yes,36
+FAN00281,Sophia Jones,sophia.jones281@example.com,69,Female,"Atlanta, GA",40-80k,No,8,109.74,Upper,72.35,Yes,Amazon Prime,57,18,YouTube TV,Sunday,1,199.59,Collectibles,Green Bay Packers,Medium,Yes,Yes,41
+FAN00282,Emma Miller,emma.miller282@example.com,30,Female,"Seattle, WA",<40k,No,3,65.53,Club,53.24,Yes,CBS,153,9,NFL+,Sunday,4,248.92,Jerseys,Seattle Seahawks,Low,Yes,Yes,49
+FAN00283,Christopher Wilson,christopher.wilson283@example.com,49,Female,"Dallas, TX",80-120k,No,9,162.06,Lower,18.12,Yes,NBC,73,13,NFL+,Sunday,5,583.52,Jerseys,Pittsburgh Steelers,Medium,Yes,No,63
+FAN00284,Jennifer Moore,jennifer.moore284@example.com,37,Female,"Dallas, TX",40-80k,No,5,153.59,Lower,55.09,Yes,NBC,164,4,Amazon Prime,Sunday,4,136.39,Caps,Chicago Bears,Medium,No,Yes,72
+FAN00285,Sophia Moore,sophia.moore285@example.com,47,Male,"Miami, FL",40-80k,No,3,54.57,Upper,34.47,Yes,NBC,110,8,YouTube TV,Sunday,3,129.26,Home Décor,Philadelphia Eagles,Medium,Yes,No,51
+FAN00286,David Garcia,david.garcia286@example.com,62,Male,"Atlanta, GA",80-120k,Yes,7,129.41,Upper,31.41,Yes,Amazon Prime,135,19,Amazon Prime,Sunday,5,711.53,Caps,Buffalo Bills,High,Yes,No,95
+FAN00287,Jessica Garcia,jessica.garcia287@example.com,59,Female,"Chicago, IL",40-80k,Yes,10,76.27,Upper,41.32,No,Fox,151,11,Amazon Prime,Sunday,4,44.03,Home Décor,Philadelphia Eagles,High,No,No,100
+FAN00288,Sophia Williams,sophia.williams288@example.com,28,Female,"Chicago, IL",40-80k,No,10,177.54,Upper,55.58,Yes,Amazon Prime,122,10,NFL+,Monday,3,296.15,Collectibles,Green Bay Packers,Medium,Yes,Yes,53
+FAN00289,Jessica Wilson,jessica.wilson289@example.com,49,Male,"Atlanta, GA",<40k,Yes,7,98.4,Upper,58.81,Yes,NBC,139,1,Peacock,Monday,4,101.87,Jerseys,New England Patriots,Medium,Yes,Yes,74
+FAN00290,John Miller,john.miller290@example.com,47,Male,"Seattle, WA",120k+,No,7,206.59,Club,28.93,No,NBC,68,0,Amazon Prime,Monday,1,1704.05,Collectibles,Seattle Seahawks,Low,Yes,Yes,15
+FAN00291,Mike Anderson,mike.anderson291@example.com,39,Male,"Atlanta, GA",<40k,No,4,149.75,Upper,43.07,Yes,Amazon Prime,93,1,Amazon Prime,Sunday,2,370.67,Collectibles,Seattle Seahawks,Medium,Yes,Yes,67
+FAN00292,Ashley Jones,ashley.jones292@example.com,67,Female,"Atlanta, GA",120k+,No,2,221.12,Club,60.09,No,NBC,51,6,Amazon Prime,Sunday,2,1032.4,Jerseys,Green Bay Packers,Medium,Yes,Yes,44
+FAN00293,Sophia Martinez,sophia.martinez293@example.com,69,Male,"Chicago, IL",<40k,Yes,11,122.39,Upper,61.44,No,ESPN,127,2,None,Thursday,3,356.75,Home Décor,New England Patriots,Medium,Yes,No,49
+FAN00294,Michael Davis,michael.davis294@example.com,61,Other,"Seattle, WA",40-80k,Yes,11,95.5,Upper,57.48,No,Amazon Prime,45,10,YouTube TV,Sunday,5,371.35,Jerseys,Seattle Seahawks,Medium,No,Yes,73
+FAN00295,Olivia Miller,olivia.miller295@example.com,52,Male,"Philadelphia, PA",120k+,No,7,415.36,Club,16.52,Yes,Amazon Prime,136,7,Amazon Prime,Sunday,4,1988.94,Collectibles,Dallas Cowboys,Low,No,Yes,33
+FAN00296,Emma Moore,emma.moore296@example.com,26,Female,"Denver, CO",40-80k,No,3,75.28,Upper,40.16,Yes,Fox,157,8,Peacock,Sunday,2,224.78,Jerseys,Dallas Cowboys,Low,Yes,No,15
+FAN00297,Emma Brown,emma.brown297@example.com,56,Female,"Chicago, IL",40-80k,No,5,62.27,Upper,72.72,Yes,Amazon Prime,119,0,Amazon Prime,Monday,3,50.28,Collectibles,Pittsburgh Steelers,Medium,Yes,Yes,69
+FAN00298,Sophia Taylor,sophia.taylor298@example.com,57,Female,"Dallas, TX",120k+,No,10,475.89,Lower,59.25,Yes,ESPN,64,9,YouTube TV,Sunday,3,966.79,Jerseys,Pittsburgh Steelers,High,Yes,No,81
+FAN00299,Sophia Anderson,sophia.anderson299@example.com,71,Female,"Boston, MA",40-80k,Yes,1,118.91,Upper,44.88,Yes,CBS,135,0,NFL+,Thursday,3,11.14,Home Décor,Seattle Seahawks,Medium,Yes,No,77
+FAN00300,John Anderson,john.anderson300@example.com,46,Female,"Denver, CO",40-80k,No,11,174.83,Upper,29.37,Yes,ESPN,140,6,Amazon Prime,Monday,2,264.13,Home Décor,Kansas City Chiefs,Low,Yes,Yes,47
+FAN00301,Emma Martinez,emma.martinez301@example.com,22,Female,"Miami, FL",120k+,No,10,430.05,Club,61.61,Yes,Fox,90,7,Peacock,Sunday,5,902.43,Caps,New England Patriots,Medium,No,Yes,49
+FAN00302,Michael Garcia,michael.garcia302@example.com,61,Male,"Chicago, IL",80-120k,Yes,3,299.43,Lower,39.31,Yes,CBS,61,9,Peacock,Monday,2,458.21,Jerseys,Dallas Cowboys,High,No,No,71
+FAN00303,Sophia Anderson,sophia.anderson303@example.com,55,Female,"Miami, FL",80-120k,No,2,218.47,Club,48.77,Yes,NBC,91,5,Amazon Prime,Sunday,3,589.97,Collectibles,Dallas Cowboys,Medium,Yes,Yes,79
+FAN00304,James Miller,james.miller304@example.com,18,Other,"Boston, MA",40-80k,Yes,9,107.68,Upper,73.88,Yes,NBC,67,18,Amazon Prime,Thursday,1,356.53,Home Décor,New England Patriots,Low,No,Yes,26
+FAN00305,Jennifer Moore,jennifer.moore305@example.com,48,Female,"Boston, MA",80-120k,Yes,0,296.54,Lower,66.08,No,Amazon Prime,85,10,None,Sunday,1,293.42,Collectibles,Green Bay Packers,Low,Yes,No,11
+FAN00306,James Johnson,james.johnson306@example.com,36,Male,"New York, NY",40-80k,No,1,176.17,Upper,67.05,No,ESPN,121,4,YouTube TV,Sunday,3,223.58,Caps,Buffalo Bills,Medium,Yes,Yes,48
+FAN00307,James Moore,james.moore307@example.com,53,Male,"Philadelphia, PA",120k+,No,5,272.05,Lower,42.05,Yes,CBS,58,3,NFL+,Sunday,4,985.29,Jerseys,Seattle Seahawks,Medium,Yes,No,44
+FAN00308,John Johnson,john.johnson308@example.com,32,Male,"Denver, CO",80-120k,No,7,210.33,Lower,63.66,Yes,ESPN,138,2,YouTube TV,Sunday,5,462.59,Collectibles,Dallas Cowboys,Medium,Yes,Yes,44
+FAN00309,James Brown,james.brown309@example.com,28,Male,"Boston, MA",40-80k,Yes,8,111.71,Lower,32.35,Yes,Fox,66,8,NFL+,Sunday,2,103.36,Home Décor,Green Bay Packers,High,Yes,Yes,76
+FAN00310,Emma Garcia,emma.garcia310@example.com,52,Male,"Los Angeles, CA",40-80k,Yes,0,156.39,Lower,80.09,No,ESPN,172,8,Amazon Prime,Sunday,3,68.67,Collectibles,Philadelphia Eagles,Medium,No,Yes,78
+FAN00311,Christopher Brown,christopher.brown311@example.com,45,Male,"Los Angeles, CA",80-120k,No,9,243.43,Upper,25.48,Yes,Amazon Prime,109,1,NFL+,Monday,5,715.39,Home Décor,Pittsburgh Steelers,High,Yes,Yes,88
+FAN00312,Ashley Garcia,ashley.garcia312@example.com,37,Female,"Boston, MA",<40k,No,7,66.94,Lower,51.62,No,Fox,124,5,NFL+,Sunday,3,138.25,Collectibles,San Francisco 49ers,Low,Yes,Yes,33
+FAN00313,Sophia Wilson,sophia.wilson313@example.com,46,Male,"Atlanta, GA",40-80k,No,2,59.46,Upper,40.12,Yes,Fox,174,16,YouTube TV,Sunday,2,316.05,Caps,Dallas Cowboys,Medium,No,Yes,69
+FAN00314,Sarah Brown,sarah.brown314@example.com,57,Male,"Chicago, IL",40-80k,No,6,114.77,Upper,47.8,Yes,NBC,81,6,Peacock,Monday,5,175.47,Jerseys,Chicago Bears,Low,No,Yes,48
+FAN00315,Christopher Smith,christopher.smith315@example.com,19,Female,"Denver, CO",80-120k,Yes,10,202.73,VIP,45.93,Yes,Fox,72,2,NFL+,Monday,2,334.16,Jerseys,Chicago Bears,Medium,Yes,Yes,43
+FAN00316,Sarah Martinez,sarah.martinez316@example.com,22,Male,"Philadelphia, PA",<40k,No,8,122.52,Upper,35.08,Yes,NBC,114,4,Amazon Prime,Monday,5,121.72,Caps,Kansas City Chiefs,Low,Yes,No,34
+FAN00317,Sophia Brown,sophia.brown317@example.com,65,Male,"Atlanta, GA",40-80k,Yes,1,154.87,Lower,44.83,Yes,CBS,105,19,Amazon Prime,Monday,2,19.95,Home Décor,Dallas Cowboys,High,Yes,No,93
+FAN00318,Emma Brown,emma.brown318@example.com,18,Female,"Atlanta, GA",<40k,No,10,139.49,Upper,70.19,No,ESPN,54,7,None,Sunday,2,103.92,Jerseys,Philadelphia Eagles,High,Yes,Yes,81
+FAN00319,Jessica Martinez,jessica.martinez319@example.com,19,Female,"Dallas, TX",<40k,No,5,80.62,Lower,30.07,No,Fox,76,9,YouTube TV,Thursday,2,373.0,Jerseys,San Francisco 49ers,Medium,Yes,No,62
+FAN00320,David Johnson,david.johnson320@example.com,36,Female,"Denver, CO",40-80k,Yes,9,130.49,Club,36.69,Yes,CBS,134,14,NFL+,Sunday,3,63.76,Jerseys,Philadelphia Eagles,High,Yes,No,74
+FAN00321,Jennifer Martinez,jennifer.martinez321@example.com,57,Male,"Denver, CO",40-80k,Yes,8,98.14,Lower,82.06,Yes,Amazon Prime,75,1,Peacock,Sunday,2,90.46,Caps,Philadelphia Eagles,High,No,Yes,100
+FAN00322,Daniel Smith,daniel.smith322@example.com,58,Male,"Chicago, IL",<40k,No,8,119.64,Upper,78.05,No,Fox,98,7,Amazon Prime,Monday,2,341.78,Caps,Buffalo Bills,High,Yes,Yes,76
+FAN00323,Ashley Davis,ashley.davis323@example.com,48,Female,"Miami, FL",80-120k,Yes,10,257.75,Lower,79.89,Yes,NBC,48,11,YouTube TV,Monday,3,413.76,Jerseys,Kansas City Chiefs,High,Yes,No,73
+FAN00324,Christopher Moore,christopher.moore324@example.com,26,Male,"Chicago, IL",40-80k,Yes,0,86.63,Lower,48.26,Yes,Amazon Prime,110,9,None,Monday,1,288.79,Caps,Kansas City Chiefs,Medium,Yes,Yes,78
+FAN00325,Olivia Moore,olivia.moore325@example.com,64,Female,"Miami, FL",<40k,Yes,10,147.85,Upper,50.63,Yes,NBC,120,14,Amazon Prime,Sunday,1,189.51,Jerseys,Pittsburgh Steelers,Low,Yes,Yes,21
+FAN00326,Emma Davis,emma.davis326@example.com,74,Male,"Los Angeles, CA",40-80k,No,8,106.69,Lower,73.45,No,Amazon Prime,99,7,None,Thursday,1,299.47,Caps,Green Bay Packers,Medium,Yes,No,58
+FAN00327,Mike Martinez,mike.martinez327@example.com,35,Female,"Denver, CO",120k+,No,2,303.69,Upper,73.51,Yes,CBS,175,8,Amazon Prime,Sunday,2,1432.26,Caps,Pittsburgh Steelers,Low,Yes,No,14
+FAN00328,Daniel Moore,daniel.moore328@example.com,45,Female,"Boston, MA",<40k,No,10,166.24,Lower,66.29,Yes,CBS,172,8,Amazon Prime,Sunday,1,91.27,Jerseys,New England Patriots,Medium,No,Yes,48
+FAN00329,Jessica Martinez,jessica.martinez329@example.com,29,Female,"New York, NY",40-80k,No,0,115.75,Club,49.1,No,Amazon Prime,149,2,Peacock,Sunday,2,7.2,Home Décor,Dallas Cowboys,Low,Yes,Yes,44
+FAN00330,Sophia Taylor,sophia.taylor330@example.com,42,Male,"Dallas, TX",120k+,Yes,9,356.07,Club,27.8,Yes,CBS,67,3,None,Sunday,1,1515.64,Home Décor,Dallas Cowboys,Low,Yes,No,24
+FAN00331,James Brown,james.brown331@example.com,32,Male,"Denver, CO",40-80k,No,8,88.7,Upper,79.63,No,ESPN,139,11,Amazon Prime,Sunday,5,13.18,Caps,Philadelphia Eagles,Medium,Yes,No,61
+FAN00332,Ashley Jones,ashley.jones332@example.com,31,Female,"Boston, MA",120k+,No,4,384.02,Upper,79.28,Yes,Amazon Prime,96,4,YouTube TV,Monday,1,892.51,Collectibles,Chicago Bears,Low,Yes,Yes,19
+FAN00333,Christopher Moore,christopher.moore333@example.com,57,Male,"Atlanta, GA",40-80k,No,6,164.33,Upper,68.48,Yes,NBC,101,12,NFL+,Thursday,1,164.01,Jerseys,Chicago Bears,Low,No,Yes,27
+FAN00334,Jessica Johnson,jessica.johnson334@example.com,49,Female,"New York, NY",40-80k,Yes,4,131.39,Upper,77.32,Yes,NBC,151,14,YouTube TV,Sunday,4,356.48,Caps,Philadelphia Eagles,Low,Yes,No,41
+FAN00335,James Williams,james.williams335@example.com,26,Female,"Chicago, IL",40-80k,No,10,131.14,Lower,39.95,Yes,Amazon Prime,164,17,YouTube TV,Sunday,5,52.81,Jerseys,Kansas City Chiefs,Low,Yes,No,22
+FAN00336,Christopher Brown,christopher.brown336@example.com,27,Female,"Denver, CO",40-80k,No,0,111.28,Upper,27.35,No,CBS,85,4,Peacock,Sunday,2,70.31,Collectibles,Seattle Seahawks,Low,Yes,No,17
+FAN00337,Emma Smith,emma.smith337@example.com,58,Male,"Denver, CO",<40k,No,7,113.79,Lower,74.8,No,NBC,113,16,YouTube TV,Sunday,1,175.44,Collectibles,Chicago Bears,Medium,No,No,78
+FAN00338,Daniel Taylor,daniel.taylor338@example.com,21,Female,"Denver, CO",40-80k,No,6,94.61,Upper,26.52,No,Fox,68,13,YouTube TV,Sunday,3,224.63,Jerseys,Philadelphia Eagles,Medium,Yes,Yes,49
+FAN00339,Sophia Smith,sophia.smith339@example.com,73,Male,"Atlanta, GA",40-80k,No,8,107.23,Club,32.94,Yes,Amazon Prime,100,4,Peacock,Sunday,2,333.28,Jerseys,Chicago Bears,Medium,No,No,56
+FAN00340,James Taylor,james.taylor340@example.com,65,Female,"Atlanta, GA",<40k,Yes,11,135.78,Lower,58.58,Yes,ESPN,92,7,NFL+,Thursday,1,172.63,Home Décor,San Francisco 49ers,High,No,Yes,97
+FAN00341,John Martinez,john.martinez341@example.com,18,Female,"New York, NY",<40k,No,3,177.17,Upper,41.15,No,CBS,175,10,NFL+,Sunday,1,63.41,Caps,San Francisco 49ers,Medium,No,Yes,41
+FAN00342,Michael Miller,michael.miller342@example.com,37,Female,"New York, NY",<40k,No,11,178.62,Lower,64.2,Yes,NBC,118,11,NFL+,Sunday,3,15.72,Jerseys,San Francisco 49ers,Medium,Yes,Yes,63
+FAN00343,Michael Brown,michael.brown343@example.com,72,Female,"Chicago, IL",120k+,No,5,242.8,VIP,62.29,No,NBC,81,13,NFL+,Sunday,5,1263.62,Caps,Buffalo Bills,Medium,No,No,56
+FAN00344,Christopher Taylor,christopher.taylor344@example.com,39,Female,"Philadelphia, PA",80-120k,Yes,8,162.16,Club,55.54,Yes,NBC,46,9,YouTube TV,Sunday,2,361.78,Jerseys,Buffalo Bills,Medium,Yes,Yes,41
+FAN00345,Jennifer Brown,jennifer.brown345@example.com,30,Female,"Dallas, TX",40-80k,Yes,0,61.6,Upper,77.64,Yes,Amazon Prime,170,13,YouTube TV,Monday,3,172.39,Jerseys,Chicago Bears,High,Yes,Yes,87
+FAN00346,Mike Smith,mike.smith346@example.com,48,Other,"Boston, MA",<40k,Yes,6,110.98,Upper,44.69,Yes,CBS,45,18,None,Sunday,3,201.77,Home Décor,Green Bay Packers,Medium,Yes,Yes,42
+FAN00347,Sophia Davis,sophia.davis347@example.com,32,Female,"Atlanta, GA",80-120k,No,7,190.27,Lower,64.21,Yes,Amazon Prime,103,11,NFL+,Monday,5,449.46,Collectibles,Buffalo Bills,Medium,Yes,Yes,56
+FAN00348,Sophia Taylor,sophia.taylor348@example.com,21,Male,"Miami, FL",40-80k,Yes,4,147.97,Lower,77.48,Yes,NBC,73,14,YouTube TV,Thursday,4,382.26,Jerseys,Philadelphia Eagles,High,Yes,Yes,87
+FAN00349,Jennifer Smith,jennifer.smith349@example.com,74,Male,"Miami, FL",<40k,Yes,8,167.19,Lower,55.78,No,CBS,118,8,None,Sunday,2,222.97,Home Décor,New England Patriots,High,Yes,Yes,97
+FAN00350,Christopher Moore,christopher.moore350@example.com,50,Female,"Boston, MA",80-120k,No,1,266.37,Club,29.89,Yes,ESPN,157,7,YouTube TV,Sunday,5,774.7,Jerseys,Buffalo Bills,High,Yes,Yes,86
+FAN00351,Sophia Smith,sophia.smith351@example.com,21,Female,"Los Angeles, CA",<40k,No,0,164.89,Upper,70.09,Yes,NBC,150,18,Amazon Prime,Sunday,3,224.59,Caps,Dallas Cowboys,Low,Yes,No,35
+FAN00352,Mike Miller,mike.miller352@example.com,65,Female,"Los Angeles, CA",<40k,No,4,65.51,Upper,42.56,Yes,Fox,63,13,YouTube TV,Thursday,2,89.83,Jerseys,Philadelphia Eagles,High,Yes,Yes,85
+FAN00353,Jessica Brown,jessica.brown353@example.com,20,Male,"New York, NY",<40k,No,3,124.45,Lower,52.0,No,NBC,81,6,NFL+,Sunday,5,200.23,Home Décor,Seattle Seahawks,Medium,No,Yes,76
+FAN00354,Ashley Garcia,ashley.garcia354@example.com,51,Female,"Los Angeles, CA",40-80k,No,2,120.5,Lower,42.6,Yes,ESPN,71,16,YouTube TV,Sunday,2,59.24,Jerseys,Dallas Cowboys,Low,Yes,Yes,13
+FAN00355,James Jones,james.jones355@example.com,33,Female,"Boston, MA",80-120k,No,1,141.16,Lower,70.06,Yes,Fox,169,6,NFL+,Sunday,3,794.13,Jerseys,Buffalo Bills,Low,No,Yes,34
+FAN00356,Jessica Moore,jessica.moore356@example.com,33,Male,"Chicago, IL",<40k,Yes,5,170.42,Upper,60.54,No,ESPN,73,6,Peacock,Sunday,1,384.65,Home Décor,New England Patriots,Medium,No,No,51
+FAN00357,Sarah Miller,sarah.miller357@example.com,56,Male,"Boston, MA",40-80k,Yes,5,131.03,Upper,63.24,Yes,CBS,93,8,YouTube TV,Sunday,2,22.53,Jerseys,Philadelphia Eagles,Medium,Yes,No,55
+FAN00358,John Smith,john.smith358@example.com,29,Female,"Miami, FL",80-120k,No,8,240.49,Club,61.99,Yes,Amazon Prime,110,9,None,Sunday,5,486.2,Home Décor,Seattle Seahawks,Low,Yes,Yes,33
+FAN00359,Sophia Taylor,sophia.taylor359@example.com,48,Female,"Seattle, WA",40-80k,No,6,87.91,Club,34.06,Yes,CBS,84,0,None,Sunday,1,106.76,Collectibles,Green Bay Packers,Low,No,Yes,45
+FAN00360,John Martinez,john.martinez360@example.com,60,Female,"Seattle, WA",40-80k,Yes,3,139.64,Upper,38.82,Yes,NBC,139,8,None,Sunday,4,137.59,Caps,Philadelphia Eagles,High,Yes,Yes,78
+FAN00361,James Anderson,james.anderson361@example.com,23,Female,"Dallas, TX",120k+,Yes,6,327.77,Club,44.72,No,NBC,52,3,Peacock,Sunday,2,1978.29,Caps,Philadelphia Eagles,High,Yes,Yes,96
+FAN00362,Sarah Wilson,sarah.wilson362@example.com,25,Male,"Dallas, TX",<40k,Yes,11,128.49,Lower,15.96,No,CBS,120,8,YouTube TV,Sunday,4,65.57,Caps,Dallas Cowboys,Medium,Yes,No,71
+FAN00363,Daniel Moore,daniel.moore363@example.com,35,Female,"Philadelphia, PA",80-120k,No,8,155.36,Upper,60.36,Yes,Amazon Prime,66,0,None,Sunday,2,568.31,Collectibles,Pittsburgh Steelers,Medium,Yes,No,46
+FAN00364,Jennifer Williams,jennifer.williams364@example.com,62,Male,"Boston, MA",40-80k,Yes,5,109.22,Lower,50.02,No,NBC,169,0,YouTube TV,Sunday,3,12.33,Home Décor,Buffalo Bills,Low,Yes,No,49
+FAN00365,James Martinez,james.martinez365@example.com,61,Male,"Dallas, TX",<40k,Yes,2,85.02,Upper,31.75,Yes,NBC,104,17,NFL+,Sunday,5,320.27,Collectibles,New England Patriots,Medium,No,No,51
+FAN00366,Michael Johnson,michael.johnson366@example.com,34,Male,"Denver, CO",40-80k,No,3,142.98,Lower,43.94,Yes,Amazon Prime,45,2,None,Thursday,1,222.69,Caps,Buffalo Bills,High,Yes,Yes,75
+FAN00367,Sarah Anderson,sarah.anderson367@example.com,19,Male,"Atlanta, GA",80-120k,No,11,271.64,Club,35.7,Yes,Fox,156,12,NFL+,Monday,2,337.08,Collectibles,Chicago Bears,Low,Yes,No,45
+FAN00368,Emma Wilson,emma.wilson368@example.com,49,Female,"Chicago, IL",<40k,No,1,105.91,Upper,45.5,Yes,ESPN,178,5,Amazon Prime,Sunday,1,393.78,Home Décor,Green Bay Packers,Medium,Yes,No,46
+FAN00369,Michael Johnson,michael.johnson369@example.com,64,Female,"Philadelphia, PA",40-80k,No,4,124.26,Upper,76.94,Yes,NBC,127,12,YouTube TV,Sunday,5,330.21,Home Décor,Buffalo Bills,Low,No,Yes,44
+FAN00370,Michael Davis,michael.davis370@example.com,55,Male,"Los Angeles, CA",80-120k,Yes,6,197.8,Club,64.85,Yes,CBS,163,18,NFL+,Sunday,1,607.84,Caps,San Francisco 49ers,Medium,No,Yes,65
+FAN00371,Jennifer Brown,jennifer.brown371@example.com,22,Female,"Philadelphia, PA",40-80k,No,7,177.06,Upper,40.45,Yes,ESPN,99,18,None,Sunday,3,14.94,Collectibles,Chicago Bears,Low,Yes,Yes,22
+FAN00372,Sarah Garcia,sarah.garcia372@example.com,33,Male,"Boston, MA",80-120k,No,11,269.68,Upper,17.17,Yes,Amazon Prime,81,18,None,Sunday,3,290.19,Caps,Pittsburgh Steelers,High,Yes,No,93
+FAN00373,David Martinez,david.martinez373@example.com,59,Male,"Atlanta, GA",<40k,Yes,2,154.61,Lower,35.84,No,ESPN,55,1,Amazon Prime,Sunday,2,246.2,Collectibles,Green Bay Packers,Medium,Yes,No,71
+FAN00374,Jessica Martinez,jessica.martinez374@example.com,47,Male,"Seattle, WA",40-80k,No,1,94.89,Upper,73.76,Yes,Amazon Prime,172,7,Amazon Prime,Monday,2,396.42,Home Décor,San Francisco 49ers,Medium,Yes,Yes,59
+FAN00375,Jessica Taylor,jessica.taylor375@example.com,46,Female,"Dallas, TX",40-80k,No,8,146.87,Upper,22.65,No,NBC,126,14,Amazon Prime,Sunday,1,85.43,Jerseys,Chicago Bears,Medium,Yes,No,46
+FAN00376,Ashley Smith,ashley.smith376@example.com,54,Female,"New York, NY",80-120k,No,7,125.61,Upper,31.41,Yes,CBS,83,3,YouTube TV,Sunday,3,722.12,Jerseys,San Francisco 49ers,Low,Yes,Yes,34
+FAN00377,James Smith,james.smith377@example.com,33,Male,"Atlanta, GA",40-80k,No,9,124.19,Upper,40.88,Yes,NBC,61,8,Amazon Prime,Sunday,4,174.24,Home Décor,Green Bay Packers,Medium,No,No,62
+FAN00378,Sophia Brown,sophia.brown378@example.com,71,Female,"Atlanta, GA",80-120k,Yes,0,199.8,VIP,32.33,No,CBS,133,7,Peacock,Monday,2,551.52,Collectibles,Buffalo Bills,Medium,Yes,No,68
+FAN00379,David Johnson,david.johnson379@example.com,31,Female,"Chicago, IL",<40k,Yes,8,152.24,Upper,70.57,No,Amazon Prime,83,8,YouTube TV,Sunday,5,7.22,Collectibles,Chicago Bears,Medium,No,Yes,41
+FAN00380,Mike Martinez,mike.martinez380@example.com,29,Female,"Philadelphia, PA",40-80k,No,9,176.22,Lower,44.08,Yes,Fox,178,16,None,Sunday,3,149.44,Home Décor,Buffalo Bills,Low,Yes,No,13
+FAN00381,Jessica Davis,jessica.davis381@example.com,65,Female,"Chicago, IL",<40k,Yes,0,141.85,Lower,48.67,Yes,NBC,106,2,None,Sunday,4,199.82,Home Décor,New England Patriots,Low,Yes,Yes,25
+FAN00382,James Wilson,james.wilson382@example.com,74,Male,"Atlanta, GA",<40k,Yes,0,80.68,Upper,51.65,Yes,Amazon Prime,166,9,YouTube TV,Sunday,2,292.21,Jerseys,New England Patriots,Low,Yes,Yes,28
+FAN00383,Olivia Davis,olivia.davis383@example.com,30,Male,"Atlanta, GA",<40k,No,0,125.04,Upper,23.89,Yes,Fox,147,9,YouTube TV,Thursday,5,26.36,Jerseys,Dallas Cowboys,Medium,Yes,Yes,57
+FAN00384,Sarah Taylor,sarah.taylor384@example.com,64,Male,"Atlanta, GA",<40k,No,9,145.34,Upper,83.28,No,NBC,178,19,None,Sunday,5,348.51,Jerseys,San Francisco 49ers,Low,Yes,No,44
+FAN00385,Jessica Garcia,jessica.garcia385@example.com,35,Female,"Miami, FL",<40k,No,2,92.65,Lower,78.92,No,CBS,62,19,YouTube TV,Sunday,2,264.15,Home Décor,Seattle Seahawks,Medium,Yes,Yes,54
+FAN00386,Olivia Jones,olivia.jones386@example.com,73,Female,"Los Angeles, CA",40-80k,No,8,111.88,Upper,63.72,Yes,NBC,73,9,None,Sunday,2,360.6,Collectibles,Seattle Seahawks,Medium,Yes,Yes,49
+FAN00387,John Johnson,john.johnson387@example.com,62,Female,"Atlanta, GA",<40k,Yes,4,53.27,Lower,82.86,No,CBS,132,4,None,Monday,4,289.17,Caps,Green Bay Packers,Medium,No,No,51
+FAN00388,Mike Martinez,mike.martinez388@example.com,62,Male,"Chicago, IL",80-120k,No,2,166.63,Lower,50.6,Yes,Fox,102,17,Peacock,Sunday,3,625.21,Collectibles,Buffalo Bills,Low,Yes,No,31
+FAN00389,Michael Brown,michael.brown389@example.com,56,Female,"Miami, FL",<40k,No,6,94.34,Lower,22.77,Yes,Amazon Prime,153,9,Amazon Prime,Sunday,4,217.42,Home Décor,Seattle Seahawks,Low,Yes,Yes,25
+FAN00390,Daniel Taylor,daniel.taylor390@example.com,60,Male,"Boston, MA",<40k,Yes,4,66.24,Upper,73.1,Yes,ESPN,118,16,YouTube TV,Monday,3,10.67,Collectibles,Buffalo Bills,High,Yes,Yes,70
+FAN00391,Daniel Martinez,daniel.martinez391@example.com,41,Other,"New York, NY",<40k,No,5,80.34,Upper,19.4,Yes,ESPN,143,17,Amazon Prime,Sunday,3,181.35,Home Décor,Green Bay Packers,Medium,Yes,Yes,77
+FAN00392,Christopher Moore,christopher.moore392@example.com,41,Female,"Chicago, IL",80-120k,No,5,273.46,Lower,82.87,No,NBC,53,15,Peacock,Sunday,3,354.76,Jerseys,Seattle Seahawks,High,No,Yes,77
+FAN00393,Emma Taylor,emma.taylor393@example.com,72,Female,"Philadelphia, PA",40-80k,No,3,119.99,Upper,83.65,Yes,NBC,104,19,YouTube TV,Sunday,3,181.79,Home Décor,Buffalo Bills,Low,Yes,Yes,27
+FAN00394,Jennifer Wilson,jennifer.wilson394@example.com,49,Male,"New York, NY",120k+,Yes,5,325.73,Lower,56.14,Yes,CBS,175,3,Peacock,Sunday,3,1674.98,Jerseys,Buffalo Bills,Medium,Yes,Yes,52
+FAN00395,Ashley Smith,ashley.smith395@example.com,63,Female,"Seattle, WA",120k+,No,9,292.92,Lower,41.74,No,Amazon Prime,84,16,Peacock,Thursday,5,862.94,Collectibles,Green Bay Packers,High,Yes,Yes,77
+FAN00396,Mike Wilson,mike.wilson396@example.com,37,Female,"Philadelphia, PA",<40k,No,11,163.52,Upper,79.95,No,Amazon Prime,135,11,None,Sunday,5,281.96,Jerseys,Chicago Bears,Medium,Yes,No,78
+FAN00397,Olivia Smith,olivia.smith397@example.com,57,Male,"Denver, CO",120k+,No,2,460.24,Lower,36.65,Yes,Fox,167,5,None,Sunday,4,931.33,Caps,Seattle Seahawks,Medium,Yes,Yes,72
+FAN00398,Mike Anderson,mike.anderson398@example.com,73,Male,"Miami, FL",80-120k,Yes,11,128.71,Lower,44.71,Yes,Fox,52,8,Peacock,Monday,5,289.11,Home Décor,Buffalo Bills,Medium,No,Yes,74
+FAN00399,John Anderson,john.anderson399@example.com,58,Female,"Seattle, WA",40-80k,No,5,69.78,Upper,71.3,No,CBS,82,15,YouTube TV,Monday,4,70.66,Jerseys,Dallas Cowboys,High,Yes,Yes,98
+FAN00400,Ashley Taylor,ashley.taylor400@example.com,21,Male,"Los Angeles, CA",80-120k,No,10,269.08,Club,29.15,No,ESPN,176,1,Peacock,Thursday,3,302.32,Jerseys,New England Patriots,Medium,Yes,Yes,46
+FAN00401,Ashley Taylor,ashley.taylor401@example.com,35,Female,"Denver, CO",80-120k,No,2,279.3,Lower,74.31,Yes,CBS,132,12,Peacock,Sunday,3,332.92,Jerseys,Dallas Cowboys,Medium,Yes,Yes,62
+FAN00402,Sarah Taylor,sarah.taylor402@example.com,70,Male,"Seattle, WA",80-120k,No,3,275.02,Lower,40.88,Yes,Amazon Prime,173,1,Amazon Prime,Thursday,4,292.81,Caps,San Francisco 49ers,Medium,Yes,No,54
+FAN00403,Ashley Martinez,ashley.martinez403@example.com,20,Female,"Atlanta, GA",80-120k,Yes,0,123.67,Lower,52.98,No,NBC,151,2,Peacock,Sunday,3,562.69,Collectibles,Chicago Bears,High,No,Yes,72
+FAN00404,David Brown,david.brown404@example.com,30,Female,"Chicago, IL",40-80k,No,11,114.53,Club,55.87,Yes,Amazon Prime,176,19,Amazon Prime,Sunday,5,122.4,Caps,Green Bay Packers,Medium,No,Yes,51
+FAN00405,David Brown,david.brown405@example.com,68,Female,"Atlanta, GA",40-80k,No,6,122.65,Upper,29.99,Yes,Fox,63,16,YouTube TV,Sunday,4,282.81,Jerseys,Dallas Cowboys,Low,Yes,Yes,28
+FAN00406,Jessica Garcia,jessica.garcia406@example.com,39,Male,"Atlanta, GA",40-80k,Yes,9,128.81,Upper,82.4,Yes,CBS,120,2,NFL+,Thursday,2,209.5,Caps,Philadelphia Eagles,Medium,Yes,Yes,41
+FAN00407,David Moore,david.moore407@example.com,44,Female,"Miami, FL",80-120k,No,2,241.33,Club,74.17,Yes,Amazon Prime,156,3,NFL+,Sunday,2,328.78,Collectibles,Dallas Cowboys,Medium,No,No,73
+FAN00408,Sarah Martinez,sarah.martinez408@example.com,66,Male,"Seattle, WA",<40k,Yes,11,96.28,Upper,46.36,Yes,Amazon Prime,155,2,Amazon Prime,Monday,4,113.64,Home Décor,Buffalo Bills,Medium,Yes,Yes,47
+FAN00409,Sarah Martinez,sarah.martinez409@example.com,64,Male,"Philadelphia, PA",80-120k,Yes,8,254.63,Club,44.23,No,Amazon Prime,136,19,Amazon Prime,Sunday,5,318.16,Jerseys,San Francisco 49ers,High,Yes,Yes,74
+FAN00410,John Jones,john.jones410@example.com,48,Male,"Seattle, WA",<40k,No,9,122.31,Club,71.84,Yes,Amazon Prime,153,18,None,Sunday,5,164.56,Collectibles,Chicago Bears,Low,No,Yes,35
+FAN00411,Emma Taylor,emma.taylor411@example.com,49,Female,"Seattle, WA",40-80k,Yes,6,92.05,Upper,84.44,No,CBS,58,4,NFL+,Sunday,4,9.26,Home Décor,Pittsburgh Steelers,Medium,Yes,No,68
+FAN00412,Jennifer Wilson,jennifer.wilson412@example.com,50,Male,"Philadelphia, PA",<40k,Yes,7,61.24,Upper,20.06,No,Fox,124,10,None,Sunday,1,303.77,Jerseys,Green Bay Packers,Medium,Yes,No,78
+FAN00413,Jennifer Johnson,jennifer.johnson413@example.com,62,Female,"Denver, CO",<40k,Yes,3,115.4,Club,66.27,No,Fox,165,9,None,Sunday,5,233.69,Collectibles,Dallas Cowboys,Low,Yes,Yes,22
+FAN00414,Jennifer Davis,jennifer.davis414@example.com,72,Female,"Philadelphia, PA",40-80k,No,10,129.03,Upper,63.67,Yes,NBC,72,17,Peacock,Monday,4,41.91,Collectibles,New England Patriots,Low,Yes,No,35
+FAN00415,Michael Anderson,michael.anderson415@example.com,64,Female,"Atlanta, GA",40-80k,Yes,5,98.56,Upper,63.87,Yes,CBS,139,11,YouTube TV,Sunday,1,85.72,Home Décor,Dallas Cowboys,Medium,Yes,No,72
+FAN00416,Daniel Johnson,daniel.johnson416@example.com,30,Female,"Denver, CO",40-80k,Yes,1,52.67,Upper,66.26,No,Fox,172,7,NFL+,Sunday,4,145.42,Jerseys,Green Bay Packers,High,Yes,No,93
+FAN00417,Michael Jones,michael.jones417@example.com,42,Male,"Los Angeles, CA",80-120k,No,5,148.35,Lower,61.73,Yes,CBS,84,7,None,Sunday,1,556.6,Caps,Kansas City Chiefs,Low,Yes,No,32
+FAN00418,Emma Miller,emma.miller418@example.com,57,Male,"Boston, MA",<40k,Yes,6,77.97,VIP,69.14,No,Fox,130,4,Amazon Prime,Sunday,4,330.15,Collectibles,Buffalo Bills,Medium,Yes,No,72
+FAN00419,Daniel Moore,daniel.moore419@example.com,66,Female,"Philadelphia, PA",40-80k,Yes,3,145.72,Upper,26.78,No,CBS,121,6,YouTube TV,Sunday,1,228.54,Jerseys,Seattle Seahawks,Low,Yes,Yes,38
+FAN00420,Ashley Wilson,ashley.wilson420@example.com,48,Male,"Miami, FL",40-80k,Yes,0,172.54,Upper,41.17,Yes,Amazon Prime,123,11,None,Sunday,2,327.19,Caps,Dallas Cowboys,Low,Yes,Yes,13
+FAN00421,Daniel Anderson,daniel.anderson421@example.com,22,Male,"Philadelphia, PA",40-80k,Yes,0,87.27,Upper,56.9,Yes,Fox,95,18,Peacock,Sunday,4,146.78,Home Décor,Green Bay Packers,Low,Yes,Yes,22
+FAN00422,Jessica Davis,jessica.davis422@example.com,55,Female,"Los Angeles, CA",40-80k,No,1,66.26,Upper,22.52,No,Amazon Prime,54,0,None,Thursday,2,16.6,Home Décor,Buffalo Bills,Low,Yes,Yes,28
+FAN00423,Jennifer Wilson,jennifer.wilson423@example.com,53,Female,"Dallas, TX",120k+,No,6,478.27,Lower,30.41,Yes,Amazon Prime,124,15,Amazon Prime,Sunday,4,961.59,Collectibles,Buffalo Bills,High,No,Yes,79
+FAN00424,Christopher Jones,christopher.jones424@example.com,60,Male,"Boston, MA",40-80k,No,1,98.1,Lower,67.34,Yes,Amazon Prime,177,12,None,Monday,3,296.31,Jerseys,Seattle Seahawks,Medium,Yes,Yes,72
+FAN00425,Emma Taylor,emma.taylor425@example.com,41,Male,"Seattle, WA",80-120k,No,2,141.57,VIP,23.73,Yes,Fox,153,0,None,Sunday,4,470.65,Collectibles,New England Patriots,High,Yes,Yes,86
+FAN00426,Sarah Smith,sarah.smith426@example.com,44,Male,"New York, NY",40-80k,No,0,128.36,Club,77.51,No,NBC,134,19,NFL+,Sunday,5,394.4,Home Décor,Pittsburgh Steelers,High,Yes,Yes,66
+FAN00427,Ashley Smith,ashley.smith427@example.com,60,Male,"Miami, FL",80-120k,No,2,178.12,Club,44.39,Yes,Amazon Prime,169,1,Amazon Prime,Monday,2,488.76,Home Décor,New England Patriots,Medium,Yes,Yes,44
+FAN00428,Christopher Wilson,christopher.wilson428@example.com,28,Female,"Chicago, IL",80-120k,Yes,0,157.88,Lower,82.2,No,ESPN,167,10,NFL+,Sunday,4,390.95,Collectibles,San Francisco 49ers,Medium,Yes,No,45
+FAN00429,John Jones,john.jones429@example.com,37,Male,"Denver, CO",<40k,Yes,0,80.14,Upper,62.04,Yes,NBC,57,4,NFL+,Thursday,1,319.18,Home Décor,Kansas City Chiefs,Low,Yes,No,10
+FAN00430,Ashley Martinez,ashley.martinez430@example.com,23,Female,"Los Angeles, CA",<40k,No,2,146.04,Lower,43.31,Yes,NBC,170,18,Peacock,Sunday,5,383.97,Caps,Buffalo Bills,Medium,No,Yes,70
+FAN00431,Sarah Anderson,sarah.anderson431@example.com,65,Male,"Seattle, WA",40-80k,No,10,108.68,Lower,79.92,Yes,CBS,85,9,Peacock,Sunday,4,98.79,Collectibles,Green Bay Packers,Medium,Yes,Yes,74
+FAN00432,Emma Brown,emma.brown432@example.com,28,Male,"Dallas, TX",40-80k,No,4,66.44,Upper,28.96,Yes,CBS,168,14,YouTube TV,Sunday,3,165.79,Caps,Kansas City Chiefs,High,Yes,No,86
+FAN00433,Olivia Garcia,olivia.garcia433@example.com,69,Male,"Miami, FL",40-80k,No,9,115.9,Lower,35.24,Yes,Amazon Prime,179,15,None,Monday,4,274.96,Home Décor,Seattle Seahawks,High,Yes,No,83
+FAN00434,Christopher Brown,christopher.brown434@example.com,55,Female,"Atlanta, GA",80-120k,No,1,266.85,Club,50.84,Yes,Fox,65,15,NFL+,Sunday,3,760.88,Home Décor,Kansas City Chiefs,Medium,Yes,No,43
+FAN00435,David Anderson,david.anderson435@example.com,44,Male,"Los Angeles, CA",40-80k,Yes,5,147.24,Upper,64.89,Yes,Fox,107,16,Peacock,Sunday,4,55.58,Caps,Philadelphia Eagles,Medium,Yes,No,56
+FAN00436,Sarah Anderson,sarah.anderson436@example.com,71,Male,"Denver, CO",120k+,No,11,426.52,Lower,83.32,Yes,NBC,176,8,Peacock,Sunday,3,812.04,Collectibles,Kansas City Chiefs,High,No,Yes,97
+FAN00437,Emma Williams,emma.williams437@example.com,65,Female,"Philadelphia, PA",40-80k,No,0,79.69,Upper,28.2,Yes,ESPN,82,18,Amazon Prime,Sunday,5,328.88,Home Décor,Chicago Bears,Medium,Yes,No,48
+FAN00438,Olivia Taylor,olivia.taylor438@example.com,64,Female,"Los Angeles, CA",<40k,Yes,2,151.14,Upper,36.05,Yes,ESPN,115,19,Peacock,Sunday,2,197.21,Collectibles,San Francisco 49ers,Medium,No,No,66
+FAN00439,James Martinez,james.martinez439@example.com,44,Male,"Atlanta, GA",40-80k,Yes,2,87.23,Upper,54.19,Yes,Fox,138,16,None,Sunday,4,305.7,Jerseys,Philadelphia Eagles,Low,Yes,No,32
+FAN00440,Sophia Miller,sophia.miller440@example.com,46,Female,"Boston, MA",80-120k,No,0,235.45,Upper,83.89,Yes,CBS,103,15,Amazon Prime,Sunday,5,662.08,Caps,Pittsburgh Steelers,High,Yes,No,71
+FAN00441,Emma Smith,emma.smith441@example.com,65,Male,"Boston, MA",<40k,No,11,144.32,Upper,82.94,No,Amazon Prime,58,19,NFL+,Sunday,3,91.93,Home Décor,Chicago Bears,Medium,Yes,No,45
+FAN00442,John Smith,john.smith442@example.com,48,Female,"Los Angeles, CA",<40k,Yes,6,136.03,Upper,37.18,No,ESPN,151,15,None,Thursday,3,179.29,Jerseys,Buffalo Bills,Medium,Yes,No,48
+FAN00443,Sarah Davis,sarah.davis443@example.com,45,Male,"Miami, FL",40-80k,No,3,154.56,Lower,18.04,Yes,CBS,83,5,Amazon Prime,Sunday,5,359.7,Home Décor,San Francisco 49ers,Low,Yes,No,16
+FAN00444,Jennifer Wilson,jennifer.wilson444@example.com,34,Male,"Dallas, TX",40-80k,No,0,110.28,Lower,30.31,Yes,Amazon Prime,92,1,NFL+,Sunday,4,35.41,Caps,Pittsburgh Steelers,Low,No,Yes,46
+FAN00445,Sophia Wilson,sophia.wilson445@example.com,30,Female,"New York, NY",80-120k,No,8,137.0,VIP,61.95,Yes,NBC,163,11,Amazon Prime,Sunday,5,793.33,Collectibles,Pittsburgh Steelers,Low,Yes,Yes,38
+FAN00446,Olivia Williams,olivia.williams446@example.com,64,Male,"Atlanta, GA",80-120k,No,4,180.83,VIP,76.72,No,ESPN,56,11,Amazon Prime,Sunday,2,385.99,Home Décor,Seattle Seahawks,Low,Yes,Yes,42
+FAN00447,John Anderson,john.anderson447@example.com,72,Male,"Chicago, IL",<40k,Yes,4,56.67,Upper,43.38,Yes,NBC,62,3,None,Sunday,2,152.06,Jerseys,Philadelphia Eagles,Medium,Yes,Yes,56
+FAN00448,Sophia Jones,sophia.jones448@example.com,27,Female,"Denver, CO",<40k,No,1,101.81,Lower,16.58,Yes,Fox,52,16,None,Sunday,4,7.67,Collectibles,Dallas Cowboys,Low,No,No,43
+FAN00449,Jennifer Garcia,jennifer.garcia449@example.com,43,Male,"Chicago, IL",80-120k,No,5,154.28,Upper,31.35,No,NBC,108,4,Amazon Prime,Sunday,3,465.29,Jerseys,Pittsburgh Steelers,Medium,Yes,No,52
+FAN00450,Emma Moore,emma.moore450@example.com,59,Male,"Miami, FL",40-80k,No,2,52.81,Upper,52.15,Yes,Amazon Prime,67,0,YouTube TV,Sunday,2,193.44,Collectibles,San Francisco 49ers,Medium,No,Yes,62
+FAN00451,David Wilson,david.wilson451@example.com,56,Male,"Atlanta, GA",40-80k,Yes,10,156.24,Upper,55.52,Yes,NBC,127,5,None,Sunday,3,224.1,Caps,Philadelphia Eagles,Low,Yes,Yes,33
+FAN00452,Ashley Anderson,ashley.anderson452@example.com,24,Other,"Atlanta, GA",40-80k,Yes,2,92.34,Upper,15.7,Yes,NBC,58,2,None,Sunday,5,288.66,Caps,Green Bay Packers,High,No,Yes,77
+FAN00453,Sarah Anderson,sarah.anderson453@example.com,18,Male,"New York, NY",80-120k,No,7,260.53,Club,53.84,Yes,ESPN,172,7,Amazon Prime,Sunday,5,329.0,Caps,San Francisco 49ers,High,Yes,Yes,78
+FAN00454,Daniel Anderson,daniel.anderson454@example.com,61,Female,"Atlanta, GA",80-120k,Yes,11,203.22,Club,47.03,Yes,CBS,178,18,Amazon Prime,Monday,3,628.45,Jerseys,Buffalo Bills,Low,Yes,No,33
+FAN00455,Olivia Garcia,olivia.garcia455@example.com,21,Male,"Denver, CO",40-80k,No,4,117.3,Lower,60.32,Yes,Fox,88,2,YouTube TV,Thursday,3,332.73,Caps,Dallas Cowboys,Medium,Yes,No,53
+FAN00456,David Martinez,david.martinez456@example.com,72,Female,"Los Angeles, CA",80-120k,Yes,7,238.27,Lower,68.62,Yes,ESPN,161,18,Amazon Prime,Sunday,4,639.38,Jerseys,Kansas City Chiefs,High,Yes,Yes,96
+FAN00457,Sophia Brown,sophia.brown457@example.com,62,Male,"Denver, CO",<40k,No,1,62.42,Lower,17.67,Yes,CBS,104,0,YouTube TV,Sunday,3,263.55,Home Décor,Dallas Cowboys,Low,No,Yes,10
+FAN00458,Jessica Johnson,jessica.johnson458@example.com,31,Female,"Dallas, TX",40-80k,Yes,10,105.79,Upper,35.54,No,CBS,111,3,Amazon Prime,Sunday,5,121.93,Caps,San Francisco 49ers,Medium,Yes,Yes,75
+FAN00459,Sarah Moore,sarah.moore459@example.com,69,Female,"New York, NY",80-120k,No,5,223.48,Lower,23.32,Yes,ESPN,130,15,Peacock,Monday,4,438.8,Caps,San Francisco 49ers,Low,Yes,No,24
+FAN00460,David Smith,david.smith460@example.com,58,Female,"Philadelphia, PA",40-80k,No,1,126.84,Lower,54.24,Yes,Amazon Prime,145,0,NFL+,Sunday,2,201.51,Caps,Pittsburgh Steelers,High,Yes,Yes,76
+FAN00461,Olivia Miller,olivia.miller461@example.com,30,Female,"Boston, MA",<40k,Yes,9,149.9,Lower,69.5,No,ESPN,148,1,None,Sunday,3,82.11,Home Décor,Chicago Bears,Medium,Yes,Yes,61
+FAN00462,James Moore,james.moore462@example.com,29,Female,"Denver, CO",<40k,Yes,3,155.54,Lower,44.0,Yes,CBS,166,5,Peacock,Monday,4,287.56,Home Décor,Kansas City Chiefs,Low,Yes,Yes,38
+FAN00463,Emma Davis,emma.davis463@example.com,36,Male,"Miami, FL",40-80k,Yes,0,69.48,Club,57.99,Yes,NBC,60,1,NFL+,Monday,4,105.58,Home Décor,Dallas Cowboys,Medium,Yes,Yes,54
+FAN00464,James Wilson,james.wilson464@example.com,40,Male,"Seattle, WA",<40k,No,7,111.46,Lower,21.39,Yes,CBS,78,17,Amazon Prime,Sunday,2,270.85,Collectibles,Chicago Bears,Medium,Yes,Yes,56
+FAN00465,Jessica Anderson,jessica.anderson465@example.com,27,Female,"Seattle, WA",80-120k,No,11,240.04,Lower,66.63,Yes,Fox,105,13,None,Sunday,2,340.42,Collectibles,New England Patriots,Medium,No,No,45
+FAN00466,James Brown,james.brown466@example.com,51,Female,"Philadelphia, PA",40-80k,No,2,157.92,Lower,57.57,Yes,ESPN,138,16,Amazon Prime,Sunday,4,380.24,Jerseys,Dallas Cowboys,Medium,Yes,No,59
+FAN00467,Daniel Jones,daniel.jones467@example.com,57,Female,"Denver, CO",80-120k,No,2,253.68,VIP,68.41,No,NBC,66,3,NFL+,Thursday,3,307.94,Caps,Seattle Seahawks,Medium,Yes,Yes,58
+FAN00468,David Taylor,david.taylor468@example.com,43,Female,"Boston, MA",80-120k,No,5,288.54,Upper,33.92,Yes,NBC,108,1,None,Thursday,2,554.96,Home Décor,Green Bay Packers,Low,No,Yes,25
+FAN00469,Jennifer Moore,jennifer.moore469@example.com,25,Male,"Boston, MA",40-80k,No,3,179.12,Upper,77.49,No,NBC,177,4,YouTube TV,Sunday,2,4.63,Caps,Philadelphia Eagles,Medium,Yes,Yes,47
+FAN00470,Daniel Johnson,daniel.johnson470@example.com,72,Female,"Chicago, IL",40-80k,No,2,79.89,Lower,84.33,Yes,CBS,130,18,YouTube TV,Sunday,3,59.25,Collectibles,Dallas Cowboys,Medium,No,Yes,52
+FAN00471,Ashley Davis,ashley.davis471@example.com,32,Female,"Boston, MA",80-120k,Yes,11,194.9,Club,49.08,No,CBS,141,9,NFL+,Sunday,4,210.15,Jerseys,New England Patriots,Low,No,No,26
+FAN00472,Christopher Miller,christopher.miller472@example.com,74,Male,"New York, NY",<40k,No,6,112.73,Upper,16.7,Yes,Fox,83,16,Amazon Prime,Monday,3,136.44,Home Décor,San Francisco 49ers,Medium,No,Yes,73
+FAN00473,John Miller,john.miller473@example.com,39,Male,"Dallas, TX",80-120k,Yes,8,133.13,Lower,45.81,Yes,CBS,48,19,Amazon Prime,Sunday,5,692.68,Home Décor,Kansas City Chiefs,High,No,No,92
+FAN00474,Michael Davis,michael.davis474@example.com,42,Female,"Miami, FL",80-120k,Yes,5,206.45,Lower,31.23,No,ESPN,143,19,None,Sunday,4,306.46,Collectibles,Philadelphia Eagles,Medium,No,Yes,63
+FAN00475,Jessica Smith,jessica.smith475@example.com,19,Male,"Chicago, IL",40-80k,Yes,1,109.49,Upper,63.27,Yes,Fox,159,15,Amazon Prime,Sunday,4,207.56,Collectibles,Green Bay Packers,Medium,Yes,Yes,45
+FAN00476,Daniel Martinez,daniel.martinez476@example.com,30,Female,"Boston, MA",40-80k,Yes,2,89.16,Lower,56.86,Yes,NBC,150,15,None,Thursday,3,7.43,Home Décor,Pittsburgh Steelers,Low,Yes,Yes,30
+FAN00477,Jessica Miller,jessica.miller477@example.com,66,Female,"Los Angeles, CA",40-80k,No,1,65.43,Club,35.41,Yes,Amazon Prime,52,1,NFL+,Sunday,2,228.15,Jerseys,Dallas Cowboys,Medium,Yes,Yes,77
+FAN00478,David Davis,david.davis478@example.com,44,Male,"Boston, MA",40-80k,No,11,108.73,Upper,38.55,No,ESPN,53,19,Amazon Prime,Monday,5,387.48,Jerseys,New England Patriots,Medium,Yes,Yes,40
+FAN00479,David Wilson,david.wilson479@example.com,59,Female,"Boston, MA",120k+,No,0,399.88,VIP,79.83,Yes,CBS,145,8,Amazon Prime,Sunday,4,853.47,Collectibles,Chicago Bears,Low,No,No,26
+FAN00480,Daniel Anderson,daniel.anderson480@example.com,45,Male,"Atlanta, GA",40-80k,No,0,131.09,Upper,22.57,Yes,CBS,98,10,Peacock,Sunday,4,332.07,Caps,New England Patriots,Medium,No,No,54
+FAN00481,John Wilson,john.wilson481@example.com,45,Male,"Denver, CO",<40k,No,11,159.93,Lower,15.3,Yes,CBS,126,8,NFL+,Thursday,1,364.49,Jerseys,Seattle Seahawks,Low,No,Yes,15
+FAN00482,Olivia Wilson,olivia.wilson482@example.com,70,Male,"Denver, CO",80-120k,No,4,154.35,Lower,35.31,Yes,Amazon Prime,74,1,Peacock,Sunday,1,531.71,Caps,Philadelphia Eagles,High,No,Yes,90
+FAN00483,Jennifer Garcia,jennifer.garcia483@example.com,47,Female,"Dallas, TX",120k+,No,0,336.64,VIP,63.25,Yes,ESPN,69,2,None,Monday,2,1744.28,Home Décor,Philadelphia Eagles,High,Yes,No,78
+FAN00484,Jennifer Davis,jennifer.davis484@example.com,36,Male,"Miami, FL",120k+,No,0,460.31,Lower,53.85,Yes,CBS,175,10,Peacock,Sunday,5,503.21,Home Décor,Chicago Bears,High,No,Yes,78
+FAN00485,Sarah Taylor,sarah.taylor485@example.com,65,Female,"Boston, MA",40-80k,No,8,95.04,Lower,71.65,Yes,CBS,118,18,NFL+,Sunday,1,7.7,Caps,Buffalo Bills,Low,Yes,Yes,30
+FAN00486,Mike Anderson,mike.anderson486@example.com,48,Female,"New York, NY",80-120k,Yes,7,222.21,Upper,28.55,Yes,CBS,67,14,YouTube TV,Sunday,3,225.18,Collectibles,Philadelphia Eagles,High,Yes,No,84
+FAN00487,David Martinez,david.martinez487@example.com,55,Female,"Dallas, TX",40-80k,No,7,147.07,Upper,35.1,Yes,NBC,80,6,None,Sunday,3,338.77,Home Décor,Philadelphia Eagles,Low,No,Yes,25
+FAN00488,Michael Miller,michael.miller488@example.com,44,Female,"Atlanta, GA",40-80k,No,5,172.85,Upper,40.92,Yes,ESPN,145,8,Peacock,Sunday,1,19.31,Home Décor,Pittsburgh Steelers,Medium,Yes,Yes,78
+FAN00489,Jennifer Davis,jennifer.davis489@example.com,74,Female,"Denver, CO",<40k,Yes,2,142.81,Upper,32.66,Yes,Amazon Prime,138,16,Peacock,Sunday,2,174.17,Home Décor,Chicago Bears,Low,Yes,Yes,36
+FAN00490,Sarah Brown,sarah.brown490@example.com,66,Male,"New York, NY",<40k,Yes,5,67.9,Upper,66.74,Yes,CBS,117,8,None,Monday,1,244.87,Caps,Dallas Cowboys,Medium,Yes,Yes,61
+FAN00491,James Smith,james.smith491@example.com,18,Female,"Philadelphia, PA",40-80k,Yes,4,122.51,Upper,43.89,No,NBC,56,5,None,Sunday,2,344.51,Home Décor,Philadelphia Eagles,High,Yes,Yes,79
+FAN00492,Sarah Johnson,sarah.johnson492@example.com,74,Female,"Chicago, IL",40-80k,No,4,156.54,Upper,75.58,Yes,Amazon Prime,99,13,YouTube TV,Sunday,3,330.12,Collectibles,Pittsburgh Steelers,Low,Yes,Yes,18
+FAN00493,Jennifer Johnson,jennifer.johnson493@example.com,50,Female,"Denver, CO",40-80k,No,8,176.27,Club,53.08,Yes,Fox,82,1,YouTube TV,Thursday,3,47.14,Home Décor,Philadelphia Eagles,Low,No,Yes,47
+FAN00494,James Davis,james.davis494@example.com,26,Female,"Boston, MA",<40k,No,3,138.12,Upper,58.81,Yes,ESPN,178,12,Peacock,Sunday,4,190.86,Home Décor,New England Patriots,Medium,Yes,Yes,74
+FAN00495,Sophia Johnson,sophia.johnson495@example.com,26,Male,"Boston, MA",80-120k,No,2,284.03,Lower,24.8,Yes,NBC,136,19,NFL+,Thursday,4,442.25,Home Décor,New England Patriots,Medium,Yes,Yes,53
+FAN00496,James Taylor,james.taylor496@example.com,25,Female,"Miami, FL",40-80k,Yes,1,53.09,Upper,40.48,No,ESPN,75,8,YouTube TV,Sunday,1,158.76,Caps,Dallas Cowboys,Medium,Yes,No,51
+FAN00497,Ashley Garcia,ashley.garcia497@example.com,35,Female,"Denver, CO",80-120k,No,4,204.65,VIP,57.0,Yes,Fox,68,13,Amazon Prime,Monday,1,475.28,Jerseys,New England Patriots,Medium,Yes,Yes,78
+FAN00498,James Taylor,james.taylor498@example.com,73,Male,"Seattle, WA",<40k,No,2,103.75,Upper,64.37,Yes,ESPN,103,12,NFL+,Sunday,2,184.71,Caps,Seattle Seahawks,Medium,Yes,No,56
+FAN00499,Ashley Garcia,ashley.garcia499@example.com,59,Male,"Denver, CO",<40k,Yes,3,79.2,Lower,46.02,Yes,Amazon Prime,147,13,Amazon Prime,Monday,2,324.44,Collectibles,Pittsburgh Steelers,Low,Yes,No,41
+FAN00500,Mike Martinez,mike.martinez500@example.com,43,Female,"New York, NY",<40k,Yes,3,95.91,Upper,77.15,No,Fox,84,0,NFL+,Sunday,1,380.07,Home Décor,San Francisco 49ers,Medium,Yes,Yes,57
