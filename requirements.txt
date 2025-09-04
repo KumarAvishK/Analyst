@@ -1,10 +1,12 @@
 streamlit
-pandas
-numpy
-plotly
-requests
-openai>=1.0.0
-langchain
-langchain-openai
-langchain-experimental
+pandas>=2.1
+numpy>=1.26
+plotly>=5.22
+requests>=2.31
+scipy>=1.11
+scikit-learn>=1.4
+langchain>=0.2
+langchain-openai>=0.2
+langchain-experimental>=0.0.59
+tabulate>=0.9
 
