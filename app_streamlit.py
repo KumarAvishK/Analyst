@@ -4,890 +4,2851 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import requests, io
-import re
-from scipy import stats
+import requests
+import io
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
+from sklearn.ensemble import IsolationForest
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+from scipy import stats
 import warnings
 warnings.filterwarnings('ignore')
+from difflib import SequenceMatcher
+import re
+import plotly.figure_factory as ff
+import json
+import hashlib
+import time
+from datetime import datetime
+from typing import Dict, List, Optional, Any
+import uuid
 
-from langchain_openai import ChatOpenAI
-from langchain_experimental.agents import create_pandas_dataframe_agent
-from langchain.memory import ConversationBufferMemory
-from langchain.agents import AgentExecutor
-from langchain.prompts import PromptTemplate
+# Optional AI imports - will gracefully handle if not available
+try:
+    from langchain_openai import ChatOpenAI
+    from langchain_experimental.agents import create_pandas_dataframe_agent
+    from langchain.embeddings import OpenAIEmbeddings
+    from langchain.vectorstores import FAISS
+    from langchain.schema import Document
+    LANGCHAIN_AVAILABLE = True
+except ImportError:
+    LANGCHAIN_AVAILABLE = False
 
-# ====================================================
-# Enhanced Analytics Class with Intelligence
-# ====================================================
-class IntelligentNFLAnalytics:
-    def __init__(self, df):
-        self.df = df
-        self.filtered_df = None
-        self.insights = {}
-        self.color_palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
-                             '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
-        self.preprocess()
-        self.generate_insights()
+# Set page config
+st.set_page_config(
+    page_title="Agentic Data Analytics",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-    def preprocess(self):
-        """Enhanced preprocessing with better data understanding"""
-        df = self.df.copy()
-        
-        # Auto-detect numeric columns and create derived features
-        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        
-        # Smart total spending calculation
-        spend_cols = [col for col in df.columns if 'spend' in col.lower() or 'cost' in col.lower() or 'price' in col.lower()]
-        if spend_cols:
-            df['total_spend'] = df[spend_cols].sum(axis=1, skipna=True)
-        
-        # Smart age grouping
-        if 'age' in df.columns:
-            df['age_group'] = pd.cut(df['age'], 
-                                   bins=[0, 25, 35, 50, 100], 
-                                   labels=['Gen Z (18-25)', 'Millennial (26-35)', 'Gen X (36-50)', 'Boomer (51+)'])
-        
-        # Auto-detect loyalty/score columns
-        score_cols = [col for col in df.columns if 'score' in col.lower() or 'loyalty' in col.lower() or 'rating' in col.lower()]
-        if score_cols:
-            score_col = score_cols[0]
-            df['loyalty_tier'] = pd.cut(df[score_col], 
-                                      bins=[df[score_col].min()-1, df[score_col].quantile(0.33), 
-                                           df[score_col].quantile(0.67), df[score_col].max()+1], 
-                                      labels=['Low Loyalty', 'Medium Loyalty', 'High Loyalty'])
-        
-        # Auto-detect categorical columns for analysis
-        categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
-        
-        self.filtered_df = df
-        self.numeric_cols = numeric_cols
-        self.categorical_cols = categorical_cols
-        self.spend_cols = spend_cols
-
-    def generate_insights(self):
-        """Generate intelligent insights from the data"""
-        df = self.filtered_df
-        insights = {}
-        
-        # Basic stats
-        insights['total_records'] = len(df)
-        insights['missing_data_pct'] = (df.isnull().sum().sum() / (len(df) * len(df.columns))) * 100
-        
-        # Revenue insights
-        if 'total_spend' in df.columns:
-            insights['total_revenue'] = df['total_spend'].sum()
-            insights['avg_customer_value'] = df['total_spend'].mean()
-            insights['revenue_std'] = df['total_spend'].std()
-            
-            # Find high-value segments
-            high_spenders = df[df['total_spend'] > df['total_spend'].quantile(0.8)]
-            insights['high_spender_count'] = len(high_spenders)
-            insights['high_spender_revenue_share'] = (high_spenders['total_spend'].sum() / df['total_spend'].sum()) * 100
-        
-        # Correlation insights
-        numeric_df = df.select_dtypes(include=[np.number])
-        if len(numeric_df.columns) > 1:
-            corr_matrix = numeric_df.corr()
-            # Find strongest correlations (excluding self-correlation)
-            corr_pairs = []
-            for i in range(len(corr_matrix.columns)):
-                for j in range(i+1, len(corr_matrix.columns)):
-                    corr_val = corr_matrix.iloc[i, j]
-                    if abs(corr_val) > 0.5:  # Strong correlation threshold
-                        corr_pairs.append((corr_matrix.columns[i], corr_matrix.columns[j], corr_val))
-            insights['strong_correlations'] = sorted(corr_pairs, key=lambda x: abs(x[2]), reverse=True)[:3]
-        
-        # Categorical insights
-        for col in self.categorical_cols:
-            if col in df.columns:
-                value_counts = df[col].value_counts()
-                insights[f'{col}_top_category'] = value_counts.index[0]
-                insights[f'{col}_dominance'] = (value_counts.iloc[0] / len(df)) * 100
-        
-        self.insights = insights
-
-    def create_intelligent_dashboard(self):
-        """Create contextually aware dashboard with data stories"""
-        df = self.filtered_df
-        
-        # Determine the most interesting visualizations based on data
-        fig = make_subplots(
-            rows=3, cols=2,
-            subplot_titles=self.get_intelligent_chart_titles(),
-            specs=[[{"type": "bar"}, {"type": "domain"}],
-                   [{"type": "scatter"}, {"type": "bar"}],
-                   [{"type": "box"}, {"type": "heatmap"}]],
-            vertical_spacing=0.08
-        )
-        
-        # Chart 1: Most impactful categorical vs numeric relationship
-        if self.categorical_cols and self.numeric_cols:
-            cat_col = self.find_best_categorical_column()
-            num_col = self.find_best_numeric_column()
-            
-            grouped_data = df.groupby(cat_col)[num_col].mean().sort_values(ascending=False)
-            colors = self.color_palette[:len(grouped_data)]
-            
-            fig.add_trace(go.Bar(
-                x=grouped_data.index, 
-                y=grouped_data.values,
-                marker_color=colors,
-                name=f'Avg {num_col}',
-                text=[f'${x:,.0f}' if 'spend' in num_col.lower() else f'{x:.1f}' for x in grouped_data.values],
-                textposition='auto'
-            ), row=1, col=1)
-        
-        # Chart 2: Market share/distribution pie
-        if self.categorical_cols:
-            main_cat = self.find_most_diverse_category()
-            cat_counts = df[main_cat].value_counts().head(8)
-            
-            fig.add_trace(go.Pie(
-                labels=cat_counts.index, 
-                values=cat_counts.values,
-                hole=0.3,
-                marker_colors=self.color_palette[:len(cat_counts)]
-            ), row=1, col=2)
-        
-        # Chart 3: Correlation scatter with trend
-        if len(self.numeric_cols) >= 2:
-            x_col, y_col = self.find_best_correlation_pair()
-            
-            fig.add_trace(go.Scatter(
-                x=df[x_col], 
-                y=df[y_col],
-                mode='markers',
-                marker=dict(size=8, opacity=0.6, color=self.color_palette[0]),
-                name=f'{x_col} vs {y_col}'
-            ), row=2, col=1)
-            
-            # Add trendline
-            z = np.polyfit(df[x_col].dropna(), df[y_col].dropna(), 1)
-            p = np.poly1d(z)
-            fig.add_trace(go.Scatter(
-                x=sorted(df[x_col].dropna()), 
-                y=p(sorted(df[x_col].dropna())),
-                mode='lines',
-                line=dict(color='red', width=2),
-                name='Trend'
-            ), row=2, col=1)
-        
-        # Chart 4: Performance comparison
-        if 'total_spend' in df.columns and len(self.categorical_cols) > 0:
-            cat_col = self.find_best_categorical_column()
-            perf_data = df.groupby(cat_col)['total_spend'].agg(['mean', 'count']).reset_index()
-            perf_data = perf_data.sort_values('mean', ascending=True)
-            
-            fig.add_trace(go.Bar(
-                y=perf_data[cat_col],
-                x=perf_data['mean'],
-                orientation='h',
-                marker_color=self.color_palette[1],
-                text=[f'${x:,.0f} (n={n})' for x, n in zip(perf_data['mean'], perf_data['count'])],
-                textposition='auto'
-            ), row=2, col=2)
-        
-        # Chart 5: Distribution analysis
-        if self.numeric_cols:
-            main_numeric = self.find_best_numeric_column()
-            if len(self.categorical_cols) > 0:
-                cat_col = self.find_best_categorical_column()
-                
-                for i, category in enumerate(df[cat_col].unique()[:5]):
-                    subset = df[df[cat_col] == category]
-                    fig.add_trace(go.Box(
-                        y=subset[main_numeric],
-                        name=category,
-                        marker_color=self.color_palette[i % len(self.color_palette)]
-                    ), row=3, col=1)
-        
-        # Chart 6: Correlation heatmap
-        if len(self.numeric_cols) >= 3:
-            corr_cols = self.numeric_cols[:6]  # Limit for readability
-            corr_data = df[corr_cols].corr()
-            
-            fig.add_trace(go.Heatmap(
-                z=corr_data.values,
-                x=corr_data.columns,
-                y=corr_data.columns,
-                colorscale='RdBu',
-                zmid=0,
-                text=np.round(corr_data.values, 2),
-                texttemplate='%{text}',
-                textfont={"size": 10}
-            ), row=3, col=2)
-        
-        fig.update_layout(
-            height=1200, 
-            showlegend=True, 
-            title_text="🏈 Intelligent NFL Fan Analytics Dashboard",
-            title_x=0.5,
-            font=dict(size=12)
-        )
-        
-        fig.update_xaxes(tickangle=45)
-        st.plotly_chart(fig, use_container_width=True)
-
-    def get_intelligent_chart_titles(self):
-        """Generate contextual chart titles based on data insights"""
-        titles = [
-            f"Revenue by {self.find_best_categorical_column()}" if self.categorical_cols else "Performance Analysis",
-            f"{self.find_most_diverse_category()} Distribution" if self.categorical_cols else "Market Share",
-            "Revenue Correlation Analysis" if 'total_spend' in self.filtered_df.columns else "Correlation Analysis",
-            "Performance Ranking",
-            f"{self.find_best_numeric_column()} Distribution by Category" if self.numeric_cols else "Distribution Analysis",
-            "Feature Correlation Matrix"
-        ]
-        return titles
-
-    def find_best_categorical_column(self):
-        """Find the most analytically interesting categorical column"""
-        if not self.categorical_cols:
-            return None
-        
-        # Prefer columns with moderate cardinality (not too many, not too few categories)
-        scores = {}
-        for col in self.categorical_cols:
-            if col in self.filtered_df.columns:
-                unique_count = self.filtered_df[col].nunique()
-                # Sweet spot: 2-8 categories
-                if 2 <= unique_count <= 8:
-                    scores[col] = 10 - abs(5 - unique_count)  # Prefer ~5 categories
-                else:
-                    scores[col] = max(1, 10 - unique_count * 0.5)  # Penalize too many categories
-        
-        return max(scores.keys(), key=scores.get) if scores else self.categorical_cols[0]
-
-    def find_best_numeric_column(self):
-        """Find the most interesting numeric column (usually revenue/spend related)"""
-        if not self.numeric_cols:
-            return None
-        
-        # Prioritize spend/revenue columns
-        for col in ['total_spend', 'revenue', 'spend', 'cost', 'price']:
-            matching_cols = [c for c in self.numeric_cols if col in c.lower()]
-            if matching_cols:
-                return matching_cols[0]
-        
-        return self.numeric_cols[0]
-
-    def find_most_diverse_category(self):
-        """Find categorical column with good diversity"""
-        if not self.categorical_cols:
-            return None
-        
-        diversity_scores = {}
-        for col in self.categorical_cols:
-            if col in self.filtered_df.columns:
-                # Calculate entropy-like measure
-                value_counts = self.filtered_df[col].value_counts()
-                proportions = value_counts / len(self.filtered_df)
-                entropy = -sum(p * np.log(p) for p in proportions if p > 0)
-                diversity_scores[col] = entropy
-        
-        return max(diversity_scores.keys(), key=diversity_scores.get) if diversity_scores else self.categorical_cols[0]
-
-    def find_best_correlation_pair(self):
-        """Find the pair with strongest correlation"""
-        if len(self.numeric_cols) < 2:
-            return self.numeric_cols[0], self.numeric_cols[0] if self.numeric_cols else (None, None)
-        
-        corr_matrix = self.filtered_df[self.numeric_cols].corr()
-        max_corr = 0
-        best_pair = (self.numeric_cols[0], self.numeric_cols[1])
-        
-        for i in range(len(self.numeric_cols)):
-            for j in range(i+1, len(self.numeric_cols)):
-                corr_val = abs(corr_matrix.iloc[i, j])
-                if corr_val > max_corr:
-                    max_corr = corr_val
-                    best_pair = (self.numeric_cols[i], self.numeric_cols[j])
-        
-        return best_pair
-
-    def get_data_story(self):
-        """Generate intelligent data story"""
-        insights = self.insights
-        story = []
-        
-        story.append(f"📊 **Dataset Overview**: {insights['total_records']:,} records with {insights['missing_data_pct']:.1f}% missing data")
-        
-        if 'total_revenue' in insights:
-            story.append(f"💰 **Revenue**: ${insights['total_revenue']:,.0f} total, ${insights['avg_customer_value']:.0f} avg per customer")
-            story.append(f"🎯 **Key Insight**: Top 20% customers generate {insights['high_spender_revenue_share']:.1f}% of revenue ({insights['high_spender_count']} high-value customers)")
-        
-        if 'strong_correlations' in insights and insights['strong_correlations']:
-            corr = insights['strong_correlations'][0]
-            story.append(f"🔗 **Strongest Relationship**: {corr[0]} ↔ {corr[1]} (correlation: {corr[2]:.2f})")
-        
-        # Add category insights
-        for col in self.categorical_cols[:2]:  # Limit to avoid clutter
-            if f'{col}_dominance' in insights:
-                story.append(f"📈 **{col.title()}**: {insights[f'{col}_top_category']} dominates ({insights[f'{col}_dominance']:.1f}% market share)")
-        
-        return story
-
-
-# ====================================================
-# Enhanced Visualization Engine
-# ====================================================
-class SmartVizEngine:
-    def __init__(self, df):
-        self.df = df
-        self.color_palette = px.colors.qualitative.Set2
-
-    def auto_visualize(self, user_query):
-        """Intelligently create visualizations based on user intent"""
-        query = user_query.lower()
-        
-        # Extract column names mentioned in query
-        mentioned_cols = [col for col in self.df.columns if col.lower() in query or 
-                         any(word in col.lower() for word in query.split())]
-        
-        # Intent detection
-        if any(word in query for word in ['compare', 'vs', 'versus', 'between']):
-            return self.create_comparison_chart(mentioned_cols)
-        elif any(word in query for word in ['trend', 'over time', 'timeline', 'evolution']):
-            return self.create_trend_chart(mentioned_cols)
-        elif any(word in query for word in ['distribution', 'spread', 'histogram']):
-            return self.create_distribution_chart(mentioned_cols)
-        elif any(word in query for word in ['correlation', 'relationship', 'related']):
-            return self.create_correlation_chart(mentioned_cols)
-        elif any(word in query for word in ['segment', 'group', 'cluster', 'breakdown']):
-            return self.create_segmentation_chart(mentioned_cols)
-        else:
-            return self.create_smart_default_chart(mentioned_cols)
-
-    def create_comparison_chart(self, cols):
-        if len(cols) >= 2:
-            # Find best categorical and numeric pair
-            cat_col = None
-            num_col = None
-            
-            for col in cols:
-                if self.df[col].dtype == 'object' and cat_col is None:
-                    cat_col = col
-                elif pd.api.types.is_numeric_dtype(self.df[col]) and num_col is None:
-                    num_col = col
-            
-            if cat_col and num_col:
-                fig = px.box(self.df, x=cat_col, y=num_col, 
-                           title=f"📊 {num_col} Distribution by {cat_col}",
-                           color_discrete_sequence=self.color_palette)
-                fig.update_layout(height=500)
-                return fig, f"Created comparison chart showing {num_col} across {cat_col} categories"
-        
-        return None, "Need categorical and numeric columns for comparison"
-
-    def create_trend_chart(self, cols):
-        # Look for date/time columns
-        date_cols = [col for col in self.df.columns if 'date' in col.lower() or 'time' in col.lower() or 'year' in col.lower()]
-        if date_cols and cols:
-            date_col = date_cols[0]
-            value_col = cols[0] if cols else None
-            
-            if value_col and pd.api.types.is_numeric_dtype(self.df[value_col]):
-                trend_data = self.df.groupby(date_col)[value_col].mean().reset_index()
-                fig = px.line(trend_data, x=date_col, y=value_col,
-                            title=f"📈 {value_col} Trend Over Time",
-                            markers=True)
-                fig.update_layout(height=500)
-                return fig, f"Created trend analysis for {value_col} over {date_col}"
-        
-        return None, "Need date/time column for trend analysis"
-
-    def create_distribution_chart(self, cols):
-        if cols:
-            col = cols[0]
-            if pd.api.types.is_numeric_dtype(self.df[col]):
-                fig = px.histogram(self.df, x=col, 
-                                 title=f"📊 Distribution of {col}",
-                                 marginal="box",
-                                 color_discrete_sequence=self.color_palette)
-                fig.update_layout(height=500)
-                return fig, f"Created distribution analysis for {col}"
-            else:
-                fig = px.bar(self.df[col].value_counts().reset_index(), 
-                           x='index', y=col,
-                           title=f"📊 {col} Frequency Distribution",
-                           color_discrete_sequence=self.color_palette)
-                fig.update_layout(height=500)
-                return fig, f"Created frequency distribution for {col}"
-        
-        return None, "Need a column name for distribution analysis"
-
-    def create_correlation_chart(self, cols):
-        numeric_cols = [col for col in cols if pd.api.types.is_numeric_dtype(self.df[col])]
-        if len(numeric_cols) >= 2:
-            fig = px.scatter(self.df, x=numeric_cols[0], y=numeric_cols[1],
-                           title=f"🔗 {numeric_cols[0]} vs {numeric_cols[1]} Correlation",
-                           trendline="ols",
-                           color_discrete_sequence=self.color_palette)
-            fig.update_layout(height=500)
-            
-            # Calculate correlation
-            corr = self.df[numeric_cols[0]].corr(self.df[numeric_cols[1]])
-            return fig, f"Created correlation chart (r={corr:.3f}) between {numeric_cols[0]} and {numeric_cols[1]}"
-        
-        return None, "Need at least 2 numeric columns for correlation analysis"
-
-    def create_segmentation_chart(self, cols):
-        if cols:
-            # Create customer segments using K-means if numeric data available
-            numeric_cols = [col for col in cols if pd.api.types.is_numeric_dtype(self.df[col])]
-            if len(numeric_cols) >= 2:
-                # Simple 3-cluster segmentation
-                scaler = StandardScaler()
-                scaled_data = scaler.fit_transform(self.df[numeric_cols[:2]].fillna(0))
-                kmeans = KMeans(n_clusters=3, random_state=42)
-                clusters = kmeans.fit_predict(scaled_data)
-                
-                plot_df = self.df.copy()
-                plot_df['Segment'] = [f'Segment {i+1}' for i in clusters]
-                
-                fig = px.scatter(plot_df, x=numeric_cols[0], y=numeric_cols[1], 
-                               color='Segment',
-                               title=f"🎯 Customer Segmentation: {numeric_cols[0]} vs {numeric_cols[1]}",
-                               color_discrete_sequence=self.color_palette)
-                fig.update_layout(height=500)
-                return fig, f"Created customer segmentation based on {numeric_cols[0]} and {numeric_cols[1]}"
-        
-        return None, "Need numeric columns for segmentation analysis"
-
-    def create_smart_default_chart(self, cols):
-        if cols:
-            col = cols[0]
-            if pd.api.types.is_numeric_dtype(self.df[col]):
-                # Create histogram with insights
-                fig = px.histogram(self.df, x=col, 
-                                 title=f"📊 {col} Analysis",
-                                 marginal="box",
-                                 color_discrete_sequence=self.color_palette)
-                
-                # Add statistics annotations
-                mean_val = self.df[col].mean()
-                median_val = self.df[col].median()
-                
-                fig.add_vline(x=mean_val, line_dash="dash", line_color="red", 
-                            annotation_text=f"Mean: {mean_val:.1f}")
-                fig.add_vline(x=median_val, line_dash="dash", line_color="blue", 
-                            annotation_text=f"Median: {median_val:.1f}")
-                
-                fig.update_layout(height=500)
-                return fig, f"Created smart analysis for {col} with key statistics"
-            else:
-                # Create enhanced bar chart
-                counts = self.df[col].value_counts().head(10)
-                fig = px.bar(x=counts.index, y=counts.values,
-                           title=f"📊 Top {col} Categories",
-                           color=counts.values,
-                           color_continuous_scale='Blues')
-                fig.update_layout(height=500)
-                return fig, f"Created top categories analysis for {col}"
-        
-        return None, "Please specify a column or analysis type"
-
-
-# ====================================================
-# Enhanced Chatbot with Intelligence
-# ====================================================
-def create_enhanced_agent(llm, df, analytics):
-    """Create an enhanced agent with data context"""
-    
-    # Enhanced system prompt with data understanding
-    system_prompt = f"""
-    You are an intelligent NFL Fan Analytics Assistant. You have access to a dataset with {len(df)} records and the following key information:
-
-    DATASET OVERVIEW:
-    - Columns: {', '.join(df.columns.tolist())}
-    - Numeric columns: {', '.join(df.select_dtypes(include=[np.number]).columns.tolist())}
-    - Categorical columns: {', '.join(df.select_dtypes(include=['object']).columns.tolist())}
-    
-    KEY INSIGHTS:
-    {chr(10).join([f"- {insight}" for insight in analytics.get_data_story()])}
-    
-    CAPABILITIES:
-    1. Answer questions about the data with specific numbers and insights
-    2. Perform statistical analysis and calculations
-    3. Identify trends, patterns, and correlations
-    4. Provide business recommendations based on data
-    5. Create data-driven narratives and explanations
-    
-    RESPONSE GUIDELINES:
-    - Keep responses concise and actionable (2-3 sentences max for simple questions)
-    - Always include specific numbers and percentages when relevant
-    - Highlight the most important insight first
-    - Use emojis to make responses engaging
-    - For complex analyses, break down into key bullet points
-    - When appropriate, suggest follow-up questions or deeper analysis
-    
-    Be conversational, insightful, and focus on providing value to business stakeholders.
-    """
-    
-    agent = create_pandas_dataframe_agent(
-        llm,
-        df,
-        verbose=True,
-        allow_dangerous_code=True,
-        prefix=system_prompt,
-        max_iterations=3,
-        early_stopping_method="generate"
-    )
-    
-    return agent
-
-
-# ====================================================
-# Streamlit App with Enhanced Intelligence
-# ====================================================
-st.set_page_config(page_title="🏈 Intelligent NFL Analytics Copilot", layout="wide")
-
-# Custom CSS for better appearance
+# Custom CSS
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.5rem;
+        font-size: 2.8rem;
         font-weight: bold;
         color: #1f77b4;
         text-align: center;
+        margin-bottom: 1rem;
+    }
+    .sub-header {
+        text-align: center;
+        color: #666;
         margin-bottom: 2rem;
     }
-    .insight-box {
-        background-color: #f0f2f6;
-        border-left: 4px solid #1f77b4;
-        padding: 1rem;
+    .clean-section {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 1.5rem;
         margin: 1rem 0;
-        border-radius: 5px;
+        border: 1px solid #e9ecef;
     }
-    .metric-container {
-        background-color: #ffffff;
+    .metric-card {
+        background-color: white;
         padding: 1rem;
         border-radius: 10px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        margin: 0.5rem;
+        margin: 0.5rem 0;
+    }
+    .data-quality-excellent {
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+    }
+    .data-quality-warning {
+        background-color: #fff3cd;
+        border: 1px solid #ffeaa7;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+    }
+    .data-quality-poor {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+    }
+    .method-card {
+        background-color: #e3f2fd;
+        border: 1px solid #bbdefb;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 0.5rem 0;
+    }
+    .agent-card {
+        background-color: #e8f4fd;
+        border: 1px solid #b3d9ff;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 0.5rem 0;
+    }
+    .agent-success {
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 0.5rem 0;
+    }
+    .agent-learning {
+        background-color: #fff3cd;
+        border: 1px solid #ffeaa7;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 0.5rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-header">🏈 Intelligent NFL Analytics Copilot</div>', unsafe_allow_html=True)
 
-# Sidebar with enhanced options
-with st.sidebar:
-    st.header("🔧 Data Controls")
-    
-    # Initialize session state
-    if "df" not in st.session_state:
-        st.session_state.df = None
-    if "analytics" not in st.session_state:
-        st.session_state.analytics = None
-    if "viz_engine" not in st.session_state:
-        st.session_state.viz_engine = None
+# -------------------------
+# AGENTIC SYSTEM CLASSES
+# -------------------------
 
-    # Data loading options
-    file = st.file_uploader("📁 Upload CSV", type="csv")
-    url = st.text_input("🌐 Or CSV URL")
+class AgentArtifact:
+    """Represents a reusable analysis agent/method"""
+    def __init__(self, 
+                 agent_id: str = None,
+                 title: str = "",
+                 description: str = "",
+                 category_tags: List[str] = None,
+                 prompt_template: str = "",
+                 examples: List[Dict] = None,
+                 tool_specs: List[str] = None,
+                 preconditions: Dict = None,
+                 postconditions: Dict = None,
+                 code_template: str = "",
+                 quality_score: float = 0.5,
+                 created_by: str = "system",
+                 trust_level: str = "low"):
+        
+        self.agent_id = agent_id or str(uuid.uuid4())
+        self.title = title
+        self.description = description
+        self.category_tags = category_tags or []
+        self.prompt_template = prompt_template
+        self.examples = examples or []
+        self.tool_specs = tool_specs or []
+        self.preconditions = preconditions or {}
+        self.postconditions = postconditions or {}
+        self.code_template = code_template
+        self.quality_score = quality_score
+        self.created_by = created_by
+        self.trust_level = trust_level
+        self.created_at = datetime.now()
+        self.usage_count = 0
+        self.success_rate = 0.0
+        
+    def to_dict(self):
+        return {
+            'agent_id': self.agent_id,
+            'title': self.title,
+            'description': self.description,
+            'category_tags': self.category_tags,
+            'prompt_template': self.prompt_template,
+            'examples': self.examples,
+            'tool_specs': self.tool_specs,
+            'preconditions': self.preconditions,
+            'postconditions': self.postconditions,
+            'code_template': self.code_template,
+            'quality_score': self.quality_score,
+            'created_by': self.created_by,
+            'trust_level': self.trust_level,
+            'created_at': self.created_at.isoformat(),
+            'usage_count': self.usage_count,
+            'success_rate': self.success_rate
+        }
     
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("📊 Load Data", type="primary"):
+    @classmethod
+    def from_dict(cls, data):
+        agent = cls()
+        for key, value in data.items():
+            if key == 'created_at':
+                agent.created_at = datetime.fromisoformat(value)
+            else:
+                setattr(agent, key, value)
+        return agent
+
+
+class AgentStore:
+    """Manages storage and retrieval of agent artifacts"""
+    def __init__(self, api_key=None):
+        self.agents = {}  # agent_id -> AgentArtifact
+        self.embeddings_model = None
+        self.vector_store = None
+        self.staging_agents = {}  # For new agents pending approval
+        
+        if api_key and LANGCHAIN_AVAILABLE:
             try:
-                if file:
-                    st.session_state.df = pd.read_csv(file)
-                elif url:
-                    r = requests.get(url, timeout=30)
-                    st.session_state.df = pd.read_csv(io.StringIO(r.text))
-                
-                if st.session_state.df is not None:
-                    st.session_state.analytics = IntelligentNFLAnalytics(st.session_state.df)
-                    st.session_state.viz_engine = SmartVizEngine(st.session_state.df)
-                    st.success("✅ Data loaded successfully!")
+                self.embeddings_model = OpenAIEmbeddings(openai_api_key=api_key)
+                self._initialize_vector_store()
             except Exception as e:
-                st.error(f"❌ Error loading data: {str(e)}")
+                st.warning(f"Could not initialize embeddings: {e}")
+    
+    def _initialize_vector_store(self):
+        """Initialize FAISS vector store with default agents"""
+        default_agents = self._create_default_agents()
+        
+        if default_agents and self.embeddings_model:
+            documents = []
+            for agent in default_agents:
+                # Create searchable text from agent
+                text = f"{agent.title} {agent.description} {' '.join(agent.category_tags)}"
+                doc = Document(
+                    page_content=text,
+                    metadata={'agent_id': agent.agent_id, 'title': agent.title}
+                )
+                documents.append(doc)
+                self.agents[agent.agent_id] = agent
+            
+            try:
+                self.vector_store = FAISS.from_documents(documents, self.embeddings_model)
+            except Exception as e:
+                st.warning(f"Could not create vector store: {e}")
+    
+    def _create_default_agents(self):
+        """Create default analysis agents"""
+        agents = []
+        
+        # Correlation Analysis Agent
+        agents.append(AgentArtifact(
+            title="Correlation Analysis",
+            description="Analyze correlations between numeric variables and create correlation matrix",
+            category_tags=["correlation", "statistics", "numeric", "relationships"],
+            prompt_template="""
+            Analyze correlations between numeric columns: {columns}
+            Create a correlation matrix and identify:
+            1. Strongest positive correlations (>0.7)
+            2. Strongest negative correlations (<-0.7)
+            3. Interesting patterns or unexpected relationships
+            4. Business implications of these relationships
+            """,
+            code_template="""
+# Correlation analysis
+numeric_cols = {columns}
+corr_matrix = df[numeric_cols].corr()
+
+# Create heatmap
+fig = px.imshow(corr_matrix, text_auto=True, aspect="auto", 
+                color_continuous_scale='RdBu', title="Correlation Matrix")
+
+# Find strong correlations
+strong_corr = []
+for i in range(len(corr_matrix.columns)):
+    for j in range(i+1, len(corr_matrix.columns)):
+        corr_val = corr_matrix.iloc[i, j]
+        if abs(corr_val) > 0.7:
+            strong_corr.append((corr_matrix.columns[i], corr_matrix.columns[j], corr_val))
+
+print("Strong correlations (|r| > 0.7):")
+for col1, col2, corr in strong_corr:
+    print(f"{col1} ↔ {col2}: {corr:.3f}")
+            """,
+            quality_score=0.9,
+            trust_level="high"
+        ))
+        
+        # Outlier Detection Agent
+        agents.append(AgentArtifact(
+            title="Outlier Detection",
+            description="Detect outliers using multiple methods (IQR, Z-score, Isolation Forest)",
+            category_tags=["outliers", "anomaly", "detection", "data-quality"],
+            prompt_template="""
+            Detect outliers in column: {column}
+            Use multiple methods:
+            1. IQR method (1.5 * IQR rule)
+            2. Z-score method (|z| > 3)
+            3. Isolation Forest
+            Provide visualizations and business recommendations for handling outliers.
+            """,
+            code_template="""
+# Outlier detection for {column}
+import numpy as np
+from sklearn.ensemble import IsolationForest
+
+data = df['{column}'].dropna()
+
+# IQR method
+Q1 = data.quantile(0.25)
+Q3 = data.quantile(0.75)
+IQR = Q3 - Q1
+lower_bound = Q1 - 1.5 * IQR
+upper_bound = Q3 + 1.5 * IQR
+iqr_outliers = data[(data < lower_bound) | (data > upper_bound)]
+
+# Z-score method
+z_scores = np.abs(stats.zscore(data))
+z_outliers = data[z_scores > 3]
+
+# Isolation Forest
+iso_forest = IsolationForest(contamination=0.1, random_state=42)
+outlier_labels = iso_forest.fit_predict(data.values.reshape(-1, 1))
+iso_outliers = data[outlier_labels == -1]
+
+print(f"IQR Outliers: {len(iqr_outliers)} ({len(iqr_outliers)/len(data)*100:.1f}%)")
+print(f"Z-score Outliers: {len(z_outliers)} ({len(z_outliers)/len(data)*100:.1f}%)")
+print(f"Isolation Forest Outliers: {len(iso_outliers)} ({len(iso_outliers)/len(data)*100:.1f}%)")
+            """,
+            quality_score=0.85,
+            trust_level="high"
+        ))
+        
+        # Predictive Modeling Agent
+        agents.append(AgentArtifact(
+            title="Linear Regression Model",
+            description="Build and evaluate linear regression model with diagnostics",
+            category_tags=["prediction", "regression", "modeling", "ml"],
+            prompt_template="""
+            Build linear regression model:
+            Target: {target}
+            Predictors: {predictors}
+            
+            Provide:
+            1. Model performance metrics (R², RMSE, MAE)
+            2. Feature importance analysis
+            3. Residual analysis
+            4. Business interpretation of coefficients
+            5. Prediction confidence intervals
+            """,
+            code_template="""
+# Linear regression model
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+
+target = '{target}'
+predictors = {predictors}
+
+# Prepare data
+model_data = df[predictors + [target]].dropna()
+X = model_data[predictors]
+y = model_data[target]
+
+# Fit model
+model = LinearRegression()
+model.fit(X, y)
+
+# Predictions and metrics
+y_pred = model.predict(X)
+r2 = r2_score(y, y_pred)
+rmse = np.sqrt(mean_squared_error(y, y_pred))
+mae = mean_absolute_error(y, y_pred)
+
+print(f"Model Performance:")
+print(f"R² Score: {r2:.3f}")
+print(f"RMSE: {rmse:.3f}")
+print(f"MAE: {mae:.3f}")
+
+# Feature importance (coefficients)
+feature_importance = pd.DataFrame({
+    'feature': predictors,
+    'coefficient': model.coef_,
+    'abs_coefficient': np.abs(model.coef_)
+}).sort_values('abs_coefficient', ascending=False)
+
+print("\\nFeature Importance:")
+print(feature_importance)
+            """,
+            quality_score=0.8,
+            trust_level="medium"
+        ))
+        
+        # Time Series Analysis Agent
+        agents.append(AgentArtifact(
+            title="Time Series Trend Analysis",
+            description="Analyze time series data for trends, seasonality, and forecasting",
+            category_tags=["time-series", "trends", "forecasting", "temporal"],
+            prompt_template="""
+            Analyze time series data:
+            Date column: {date_col}
+            Value column: {value_col}
+            
+            Analyze:
+            1. Overall trend (increasing, decreasing, stable)
+            2. Seasonal patterns
+            3. Cyclical behavior
+            4. Anomalies in the time series
+            5. Simple forecasting using trend extrapolation
+            """,
+            code_template="""
+# Time series analysis
+date_col = '{date_col}'
+value_col = '{value_col}'
+
+# Prepare time series data
+ts_data = df[[date_col, value_col]].dropna().sort_values(date_col)
+ts_data[date_col] = pd.to_datetime(ts_data[date_col])
+
+# Calculate rolling statistics
+ts_data['ma7'] = ts_data[value_col].rolling(window=7, min_periods=1).mean()
+ts_data['ma30'] = ts_data[value_col].rolling(window=30, min_periods=1).mean()
+
+# Trend analysis
+from scipy import stats
+x_numeric = np.arange(len(ts_data))
+slope, intercept, r_value, p_value, std_err = stats.linregress(x_numeric, ts_data[value_col])
+
+print(f"Trend Analysis:")
+print(f"Slope: {slope:.4f} (trend direction)")
+print(f"R²: {r_value**2:.3f} (trend strength)")
+print(f"P-value: {p_value:.4f} (significance)")
+
+trend_direction = "Increasing" if slope > 0 else "Decreasing" if slope < 0 else "Stable"
+print(f"Overall trend: {trend_direction}")
+
+# Visualize
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=ts_data[date_col], y=ts_data[value_col], 
+                        mode='lines', name='Actual'))
+fig.add_trace(go.Scatter(x=ts_data[date_col], y=ts_data['ma7'], 
+                        mode='lines', name='7-day MA'))
+fig.update_layout(title=f'Time Series: {value_col}')
+            """,
+            quality_score=0.75,
+            trust_level="medium"
+        ))
+        
+        return agents
+    
+    def search_agents(self, query: str, limit: int = 3) -> List[tuple]:
+        """Search for relevant agents using vector similarity"""
+        if not self.vector_store or not self.embeddings_model:
+            return []
+        
+        try:
+            # Perform similarity search
+            results = self.vector_store.similarity_search_with_score(query, k=limit)
+            
+            # Convert to agent artifacts with scores
+            agent_results = []
+            for doc, score in results:
+                agent_id = doc.metadata['agent_id']
+                if agent_id in self.agents:
+                    agent_results.append((self.agents[agent_id], 1.0 - score))  # Convert distance to similarity
+            
+            return agent_results
+        except Exception as e:
+            st.error(f"Search error: {e}")
+            return []
+    
+    def add_agent(self, agent: AgentArtifact, staging: bool = True):
+        """Add new agent to store"""
+        if staging:
+            self.staging_agents[agent.agent_id] = agent
+        else:
+            self.agents[agent.agent_id] = agent
+            self._update_vector_store(agent)
+    
+    def promote_agent(self, agent_id: str):
+        """Promote agent from staging to production"""
+        if agent_id in self.staging_agents:
+            agent = self.staging_agents.pop(agent_id)
+            agent.trust_level = "validated"
+            self.agents[agent_id] = agent
+            self._update_vector_store(agent)
+            return True
+        return False
+    
+    def _update_vector_store(self, agent: AgentArtifact):
+        """Update vector store with new agent"""
+        if self.vector_store and self.embeddings_model:
+            try:
+                text = f"{agent.title} {agent.description} {' '.join(agent.category_tags)}"
+                doc = Document(
+                    page_content=text,
+                    metadata={'agent_id': agent.agent_id, 'title': agent.title}
+                )
+                self.vector_store.add_documents([doc])
+            except Exception as e:
+                st.warning(f"Could not update vector store: {e}")
+    
+    def get_agent_stats(self):
+        """Get statistics about agent store"""
+        return {
+            'total_agents': len(self.agents),
+            'staging_agents': len(self.staging_agents),
+            'high_quality': len([a for a in self.agents.values() if a.quality_score > 0.8]),
+            'categories': list(set([tag for agent in self.agents.values() for tag in agent.category_tags]))
+        }
+
+
+class AgentExecutor:
+    """Executes agent solutions with current data context"""
+    def __init__(self, analytics, llm=None):
+        self.analytics = analytics
+        self.llm = llm
+        self.df = analytics.df
+    
+    def execute_agent(self, agent: AgentArtifact, user_context: Dict) -> Dict:
+        """Execute an agent with given context"""
+        try:
+            # Adapt prompt template with context
+            adapted_prompt = self._adapt_prompt(agent.prompt_template, user_context)
+            
+            # Execute based on agent type
+            if agent.code_template and "fig" in agent.code_template:
+                # This is a visualization agent
+                result = self._execute_visualization_agent(agent, user_context)
+            elif self.llm:
+                # Use LLM for analysis
+                result = self._execute_analysis_agent(adapted_prompt)
+            else:
+                result = {'output': 'No execution method available', 'success': False}
+            
+            # Update usage statistics
+            agent.usage_count += 1
+            
+            return result
+            
+        except Exception as e:
+            return {'output': f'Execution error: {str(e)}', 'success': False, 'error': str(e)}
+    
+    def _adapt_prompt(self, template: str, context: Dict) -> str:
+        """Adapt prompt template with current context"""
+        try:
+            return template.format(**context)
+        except KeyError as e:
+            # Handle missing context keys gracefully
+            return template.replace(f"{{{e.args[0]}}}", "NOT_SPECIFIED")
+    
+    def _execute_visualization_agent(self, agent: AgentArtifact, context: Dict) -> Dict:
+        """Execute visualization-focused agent"""
+        try:
+            # If agent has custom code template, use it
+            if agent.code_template and agent.code_template.strip():
+                return self._execute_code_template(agent, context)
+            
+            # Otherwise use the built-in visualization methods
+            if "correlation" in agent.category_tags:
+                numeric_cols = context.get('columns', self.analytics.numeric_cols[:5])
+                if len(numeric_cols) >= 2:
+                    corr_matrix = self.df[numeric_cols].corr()
+                    fig = px.imshow(corr_matrix, text_auto=True, aspect="auto",
+                                  color_continuous_scale='RdBu', title="Correlation Matrix")
+                    
+                    # Find strong correlations
+                    strong_corr = []
+                    for i in range(len(corr_matrix.columns)):
+                        for j in range(i+1, len(corr_matrix.columns)):
+                            corr_val = corr_matrix.iloc[i, j]
+                            if abs(corr_val) > 0.7:
+                                strong_corr.append((corr_matrix.columns[i], corr_matrix.columns[j], corr_val))
+                    
+                    analysis = f"Found {len(strong_corr)} strong correlations (|r| > 0.7):\n"
+                    for col1, col2, corr in strong_corr[:5]:
+                        analysis += f"• {col1} ↔ {col2}: {corr:.3f}\n"
+                    
+                    return {
+                        'output': analysis,
+                        'figure': fig,
+                        'success': True,
+                        'agent_used': agent.title
+                    }
+            
+            return {'output': 'Visualization not implemented for this agent type', 'success': False}
+            
+        except Exception as e:
+            return {'output': f'Visualization error: {str(e)}', 'success': False}
+    
+    def _execute_code_template(self, agent: AgentArtifact, context: Dict) -> Dict:
+        """Execute agent with custom code template"""
+        try:
+            # Get the code template
+            code = agent.code_template
+            
+            # Replace common placeholders with actual column names from context
+            if 'columns' in context:
+                # Replace generic placeholders
+                code = code.replace('{columns}', str(context['columns']))
+                if context['columns']:
+                    code = code.replace('{first_column}', context['columns'][0])
+                    if len(context['columns']) > 1:
+                        code = code.replace('{second_column}', context['columns'][1])
+            
+            # Replace other context variables
+            for key, value in context.items():
+                placeholder = f'{{{key}}}'
+                if placeholder in code:
+                    code = code.replace(placeholder, str(value))
+            
+            # Execute the code in a safe way (Note: In production, use proper sandboxing)
+            local_vars = {
+                'df': self.df,
+                'px': px,
+                'go': go,
+                'pd': pd,
+                'np': np,
+                'make_subplots': make_subplots,
+                'stats': stats
+            }
+            
+            exec(code, {"__builtins__": {}}, local_vars)
+            
+            # Look for created figure
+            fig = local_vars.get('fig', None)
+            
+            if fig:
+                return {
+                    'output': f"Successfully executed {agent.title} visualization",
+                    'figure': fig,
+                    'success': True,
+                    'agent_used': agent.title,
+                    'code_executed': code
+                }
+            else:
+                return {
+                    'output': f"Code executed but no figure was created. Make sure your code assigns the plot to 'fig' variable.",
+                    'success': False,
+                    'code_executed': code
+                }
+                
+        except Exception as e:
+            return {
+                'output': f'Code execution error: {str(e)}',
+                'success': False,
+                'error': str(e),
+                'code_attempted': code
+            }
+    
+    def _execute_analysis_agent(self, prompt: str) -> Dict:
+        """Execute analysis using LLM"""
+        try:
+            response = self.llm.predict(prompt)
+            return {'output': response, 'success': True}
+        except Exception as e:
+            return {'output': f'LLM error: {str(e)}', 'success': False}
+
+
+class AgentBuilder:
+    """Creates new agents from successful solutions"""
+    def __init__(self, llm=None):
+        self.llm = llm
+    
+    def create_agent_from_solution(self, query: str, solution: str, context: Dict) -> AgentArtifact:
+        """Create a new agent from a successful solution"""
+        # Extract key information
+        title = self._extract_title(query)
+        description = self._extract_description(query, solution)
+        category_tags = self._extract_categories(query, solution)
+        prompt_template = self._generalize_prompt(query, context)
+        
+        agent = AgentArtifact(
+            title=title,
+            description=description,
+            category_tags=category_tags,
+            prompt_template=prompt_template,
+            examples=[{'input': query, 'output': solution, 'context': context}],
+            quality_score=0.5,  # Start with medium quality
+            created_by="auto-generated",
+            trust_level="low"
+        )
+        
+        return agent
+    
+    def _extract_title(self, query: str) -> str:
+        """Extract a concise title from the query"""
+        # Simple heuristic - take first few words
+        words = query.split()[:4]
+        return " ".join(words).title()
+    
+    def _extract_description(self, query: str, solution: str) -> str:
+        """Extract description from query and solution"""
+        return f"Analysis method for: {query[:100]}..."
+    
+    def _extract_categories(self, query: str, solution: str) -> List[str]:
+        """Extract relevant category tags"""
+        categories = []
+        
+        # Analysis type keywords
+        if any(word in query.lower() for word in ['correlation', 'relationship']):
+            categories.append('correlation')
+        if any(word in query.lower() for word in ['predict', 'forecast', 'model']):
+            categories.append('prediction')
+        if any(word in query.lower() for word in ['outlier', 'anomaly']):
+            categories.append('outliers')
+        if any(word in query.lower() for word in ['time', 'trend', 'series']):
+            categories.append('time-series')
+        if any(word in query.lower() for word in ['segment', 'group', 'cluster']):
+            categories.append('segmentation')
+        
+        # Data type keywords
+        if 'numeric' in solution.lower() or 'number' in solution.lower():
+            categories.append('numeric')
+        if 'categorical' in solution.lower() or 'category' in solution.lower():
+            categories.append('categorical')
+        
+        return categories if categories else ['general']
+    
+    def _generalize_prompt(self, query: str, context: Dict) -> str:
+        """Create a generalized prompt template"""
+        # Simple generalization - replace specific values with placeholders
+        template = query
+        
+        # Replace specific column names with placeholders
+        if 'columns' in context:
+            template = template.replace(str(context['columns']), '{columns}')
+        
+        return template
+
+
+class IntentClassifier:
+    """Simple intent classification for queries"""
+    def __init__(self):
+        self.intent_patterns = {
+            'correlation': ['correlation', 'relationship', 'relate', 'associate'],
+            'prediction': ['predict', 'forecast', 'model', 'estimate'],
+            'outliers': ['outlier', 'anomaly', 'unusual', 'abnormal'],
+            'visualization': ['plot', 'chart', 'graph', 'visualize', 'show'],
+            'summary': ['summarize', 'summary', 'overview', 'describe'],
+            'time_series': ['trend', 'time', 'series', 'temporal', 'over time'],
+            'segmentation': ['segment', 'group', 'cluster', 'divide']
+        }
+    
+    def classify(self, query: str) -> str:
+        """Classify query intent"""
+        query_lower = query.lower()
+        
+        for intent, patterns in self.intent_patterns.items():
+            if any(pattern in query_lower for pattern in patterns):
+                return intent
+        
+        return 'general'
+
+
+# -------------------------
+# BASE ANALYTICS CLASS
+# -------------------------
+
+class UniversalAnalytics:
+    """Base analytics class with all original functionality"""
+    def __init__(self, df, llm=None):
+        self.df = df
+        self.llm = llm
+        self.original_df = df.copy()
+        self.color_palette = px.colors.qualitative.Set2
+        self.process_data()
+        self.generate_insights()
+        if llm and LANGCHAIN_AVAILABLE:
+            self.setup_ai_agent()
+
+    def process_data(self):
+        """Intelligent data processing that adapts to any dataset"""
+        # Detect column types
+        self.numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()
+        self.categorical_cols = self.df.select_dtypes(include=['object', 'category']).columns.tolist()
+        self.datetime_cols = []
+
+        # Data quality checks
+        self.data_quality_issues = {}
+        self.check_data_quality()
+
+        # Try to detect datetime columns
+        for col in self.df.columns:
+            if any(keyword in col.lower() for keyword in ['date', 'time', 'created', 'updated', 'timestamp']):
+                try:
+                    self.df[col] = pd.to_datetime(self.df[col])
+                    self.datetime_cols.append(col)
+                except:
+                    pass
+
+        # Detect special column types
+        self.money_cols = [col for col in self.numeric_cols 
+                          if any(word in col.lower() for word in 
+                                ['price', 'cost', 'amount', 'revenue', 'salary', 'income', 'fee', 'payment', 'spend'])]
+
+        self.score_cols = [col for col in self.numeric_cols 
+                          if any(word in col.lower() for word in 
+                                ['score', 'rating', 'rank', 'grade', 'satisfaction', 'performance'])]
+
+        self.id_cols = [col for col in self.df.columns 
+                       if any(word in col.lower() for word in ['id', 'key', 'index']) and 
+                       self.df[col].nunique() / len(self.df) > 0.8]
+
+        # Create derived features
+        if len(self.money_cols) > 1:
+            self.df['total_monetary_value'] = self.df[self.money_cols].sum(axis=1, skipna=True)
+        elif len(self.money_cols) == 1:
+            self.df['total_monetary_value'] = self.df[self.money_cols[0]]
+
+        # Update numeric columns after adding derived features
+        self.numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()
+
+    def check_data_quality(self):
+        """Comprehensive data quality assessment"""
+        issues = {}
+
+        # 1. Duplicate detection
+        duplicate_count = self.df.duplicated().sum()
+        if duplicate_count > 0:
+            issues['duplicates'] = {
+                'count': duplicate_count,
+                'percentage': (duplicate_count / len(self.df)) * 100
+            }
+
+        # 2. Missing data patterns
+        missing_data = {}
+        for col in self.df.columns:
+            missing_count = self.df[col].isnull().sum()
+            if missing_count > 0:
+                missing_data[col] = {
+                    'count': missing_count,
+                    'percentage': (missing_count / len(self.df)) * 100
+                }
+
+        if missing_data:
+            issues['missing_data'] = missing_data
+
+        # 3. Outlier detection for numeric columns
+        outlier_summary = {}
+        for col in self.numeric_cols:
+            if col in self.df.columns:
+                outliers = self.detect_outliers_advanced(col)
+                if outliers['count'] > 0:
+                    outlier_summary[col] = outliers
+
+        if outlier_summary:
+            issues['outliers'] = outlier_summary
+
+        self.data_quality_issues = issues
+
+    def detect_outliers_advanced(self, column):
+        """Advanced outlier detection with context"""
+        if column not in self.numeric_cols:
+            return {'count': 0}
+
+        data = self.df[column].dropna()
+        if len(data) < 10:
+            return {'count': 0}
+
+        # Statistical outliers (IQR method)
+        Q1 = data.quantile(0.25)
+        Q3 = data.quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+
+        statistical_outliers = data[(data < lower_bound) | (data > upper_bound)]
+
+        return {
+            'count': len(statistical_outliers),
+            'percentage': (len(statistical_outliers) / len(data)) * 100,
+            'range': f"{statistical_outliers.min():.2f} to {statistical_outliers.max():.2f}" if len(statistical_outliers) > 0 else "None"
+        }
+
+    def get_data_quality_report(self):
+        """Generate comprehensive data quality report"""
+        if not self.data_quality_issues:
+            return "excellent", "No significant data quality issues detected. Your dataset is ready for analysis!"
+
+        report = "**Data Quality Assessment**\n\n"
+
+        # Calculate quality score
+        total_issues = len(self.data_quality_issues)
+        severity_score = 0
+
+        # Duplicates
+        if 'duplicates' in self.data_quality_issues:
+            dup_info = self.data_quality_issues['duplicates']
+            severity_score += min(dup_info['percentage'] * 2, 30)
+            report += f"**Duplicates:** {dup_info['count']:,} records ({dup_info['percentage']:.1f}%)\n"
+
+        # Missing data
+        if 'missing_data' in self.data_quality_issues:
+            missing_severity = max([info['percentage'] for info in self.data_quality_issues['missing_data'].values()])
+            severity_score += min(missing_severity, 25)
+            report += f"**Missing Data:** Up to {missing_severity:.1f}% missing in some columns\n"
+
+        # Outliers
+        if 'outliers' in self.data_quality_issues:
+            outlier_severity = max([info['percentage'] for info in self.data_quality_issues['outliers'].values()])
+            severity_score += min(outlier_severity, 15)
+            report += f"**Outliers:** Up to {outlier_severity:.1f}% outliers detected\n"
+
+        # Overall quality score
+        quality_score = max(0, 100 - severity_score)
+
+        if quality_score >= 90:
+            status = "excellent"
+        elif quality_score >= 75:
+            status = "good"
+        elif quality_score >= 60:
+            status = "fair"
+        else:
+            status = "poor"
+
+        report += f"\n**Quality Score: {quality_score:.0f}/100**"
+
+        return status, report
+
+    def clean_duplicates(self):
+        """Remove duplicate records"""
+        if 'duplicates' in self.data_quality_issues:
+            original_count = len(self.df)
+            self.df = self.df.drop_duplicates()
+            removed_count = original_count - len(self.df)
+
+            # Re-process data
+            self.process_data()
+            self.generate_insights()
+
+            return f"Removed {removed_count:,} duplicate records. Dataset now has {len(self.df):,} unique records."
+        return "No duplicates found to remove."
+
+    def generate_insights(self):
+        """Generate comprehensive insights about the dataset"""
+        self.insights = {
+            'basic_stats': {
+                'rows': len(self.df),
+                'columns': len(self.df.columns),
+                'missing_pct': (self.df.isnull().sum().sum() / self.df.size) * 100,
+            },
+            'column_types': {
+                'numeric': len(self.numeric_cols),
+                'categorical': len(self.categorical_cols),
+                'datetime': len(self.datetime_cols)
+            }
+        }
+
+        # Monetary insights
+        if 'total_monetary_value' in self.df.columns:
+            money_col = 'total_monetary_value'
+            self.insights['monetary'] = {
+                'total_value': self.df[money_col].sum(),
+                'avg_value': self.df[money_col].mean(),
+                'max_value': self.df[money_col].max(),
+            }
+
+    def setup_ai_agent(self):
+        """Setup AI agent for natural language queries with visualization capabilities"""
+        if not LANGCHAIN_AVAILABLE or not self.llm:
+            return
+
+        try:
+            system_prompt = f"""
+            You are a data analyst that creates visualizations and provides insights.
+            
+            Dataset info:
+            - {len(self.df)} rows, {len(self.df.columns)} columns
+            - Numeric columns: {', '.join(self.numeric_cols)}
+            - Categorical columns: {', '.join(self.categorical_cols)}
+            
+            When users ask for visualizations:
+            1. Create the appropriate plot using plotly
+            2. Show the actual chart, not just describe it
+            3. Provide insights about what the visualization reveals
+            
+            Example: For "create a scatter plot of price vs engine size":
+            ```python
+            import plotly.express as px
+            fig = px.scatter(df, x='engine_size', y='price', title='Price vs Engine Size')
+            fig.show()
+            ```
+            """
+
+            self.agent = create_pandas_dataframe_agent(
+                self.llm,
+                self.df,
+                verbose=False,
+                allow_dangerous_code=True,
+                prefix=system_prompt,
+                max_iterations=3,
+                early_stopping_method="generate",
+                handle_parsing_errors=True
+            )
+        except Exception as e:
+            st.error(f"Could not setup AI agent: {str(e)}")
+            self.agent = None
+
+    def query_data_with_ai(self, query):
+        """Enhanced AI query handler that can create visualizations"""
+        if not hasattr(self, 'agent') or self.agent is None:
+            return "AI agent not available. Please check your API key and dependencies."
+
+        try:
+            # Execute the query
+            response = self.agent.run(query)
+            return response
+        except Exception as e:
+            return f"Error processing query: {str(e)}"
+
+
+# -------------------------
+# ENHANCED AGENTIC ANALYTICS
+# -------------------------
+
+class AgenticAnalytics(UniversalAnalytics):
+    """Enhanced analytics with agentic capabilities"""
+    def __init__(self, df, llm=None, api_key=None):
+        super().__init__(df, llm)
+        
+        # Initialize agentic components
+        self.agent_store = AgentStore(api_key)
+        self.agent_executor = AgentExecutor(self, llm)
+        self.agent_builder = AgentBuilder(llm)
+        self.intent_classifier = IntentClassifier()
+        
+        # Learning parameters
+        self.similarity_threshold = 0.7  # Threshold for agent reuse vs new learning
+        self.interaction_log = []
+    
+    def process_agentic_query(self, query: str, context: Dict = None) -> Dict:
+        """Main agentic query processing pipeline"""
+        start_time = time.time()
+        
+        # Step 1: Classify intent
+        intent = self.intent_classifier.classify(query)
+        
+        # Step 2: Search for relevant agents
+        agent_candidates = self.agent_store.search_agents(query)
+        
+        # Step 3: Determine if we have a good match or need to learn
+        if agent_candidates and agent_candidates[0][1] > self.similarity_threshold:
+            # Use existing agent
+            best_agent, similarity = agent_candidates[0]
+            result = self._execute_existing_agent(best_agent, query, context or {})
+            result['method'] = 'agent_reuse'
+            result['agent_used'] = best_agent.title
+            result['similarity'] = similarity
+        else:
+            # Learn new solution
+            result = self._learn_new_solution(query, context or {})
+            result['method'] = 'new_learning'
+        
+        # Log interaction
+        interaction = {
+            'timestamp': datetime.now(),
+            'query': query,
+            'intent': intent,
+            'context': context,
+            'result': result,
+            'processing_time': time.time() - start_time
+        }
+        self.interaction_log.append(interaction)
+        
+        return result
+    
+    def _execute_existing_agent(self, agent: AgentArtifact, query: str, context: Dict) -> Dict:
+        """Execute an existing agent"""
+        st.markdown(f'<div class="agent-success">🤖 Using Agent: <strong>{agent.title}</strong></div>', 
+                   unsafe_allow_html=True)
+        
+        # Extract context from query if not provided
+        if not context:
+            context = self._extract_context_from_query(query)
+        
+        # Execute agent
+        result = self.agent_executor.execute_agent(agent, context)
+        
+        # Update agent statistics
+        if result.get('success', False):
+            agent.success_rate = (agent.success_rate * (agent.usage_count - 1) + 1.0) / agent.usage_count
+        
+        return result
+    
+    def _learn_new_solution(self, query: str, context: Dict) -> Dict:
+        """Learn a new solution and potentially create an agent"""
+        st.markdown('<div class="agent-learning">🧠 Learning new solution...</div>', 
+                   unsafe_allow_html=True)
+        
+        # For now, fall back to the original AI query method
+        if self.llm:
+            try:
+                # Use the original query_data_with_ai method
+                solution = self.query_data_with_ai(query)
+                
+                # Create a new agent from this solution
+                new_agent = self.agent_builder.create_agent_from_solution(query, solution, context)
+                
+                # Add to staging for potential approval
+                self.agent_store.add_agent(new_agent, staging=True)
+                
+                return {
+                    'output': solution,
+                    'success': True,
+                    'new_agent_created': True,
+                    'new_agent_id': new_agent.agent_id,
+                    'new_agent_title': new_agent.title
+                }
+            except Exception as e:
+                return {'output': f'Learning error: {str(e)}', 'success': False}
+        else:
+            return {'output': 'No learning capability available (LLM required)', 'success': False}
+    
+    def _extract_context_from_query(self, query: str) -> Dict:
+        """Extract analysis context from natural language query"""
+        context = {}
+        
+        # Extract column references
+        query_lower = query.lower()
+        mentioned_cols = []
+        for col in self.df.columns:
+            if col.lower() in query_lower:
+                mentioned_cols.append(col)
+        
+        if mentioned_cols:
+            context['columns'] = mentioned_cols
+        else:
+            # Default to numeric columns for analysis
+            context['columns'] = self.numeric_cols[:5]
+        
+        # Extract specific column roles
+        if any(word in query_lower for word in ['predict', 'target', 'outcome']):
+            # Try to identify target variable
+            if mentioned_cols:
+                context['target'] = mentioned_cols[-1]  # Assume last mentioned is target
+                context['predictors'] = mentioned_cols[:-1]
+        
+        return context
+    
+    def get_agent_management_ui(self):
+        """Get agent management interface data"""
+        stats = self.agent_store.get_agent_stats()
+        return {
+            'stats': stats,
+            'agents': list(self.agent_store.agents.values()),
+            'staging_agents': list(self.agent_store.staging_agents.values()),
+            'recent_interactions': self.interaction_log[-10:]
+        }
+
+
+# -------------------------
+# SMART VISUALIZATION ENGINE (COMPLETE)
+# -------------------------
+
+class SmartVisualizationEngine:
+    def __init__(self, analytics):
+        self.analytics = analytics
+        self.df = analytics.df
+        self.color_palette = px.colors.qualitative.Set3
+
+    def create_scatter_plot(self, x_col, y_col, color_col=None):
+        """Create enhanced scatter plot"""
+        try:
+            if color_col and color_col in self.analytics.categorical_cols:
+                fig = px.scatter(
+                    self.df, x=x_col, y=y_col, color=color_col,
+                    title=f"{y_col} vs {x_col} (colored by {color_col})",
+                    hover_data=[col for col in self.df.columns if col not in [x_col, y_col, color_col]][:3]
+                )
+            else:
+                fig = px.scatter(
+                    self.df, x=x_col, y=y_col,
+                    title=f"{y_col} vs {x_col}",
+                    hover_data=[col for col in self.df.columns if col not in [x_col, y_col]][:3]
+                )
+
+            # Add correlation info
+            corr = self.df[x_col].corr(self.df[y_col])
+            fig.add_annotation(
+                text=f"Correlation: {corr:.3f}",
+                xref="paper", yref="paper", x=0.02, y=0.98,
+                showarrow=False, bgcolor="white", bordercolor="black"
+            )
+
+            # Add trend line
+            if not self.df[x_col].isnull().all() and not self.df[y_col].isnull().all():
+                z = np.polyfit(self.df[x_col].dropna(), self.df[y_col].dropna(), 1)
+                p = np.poly1d(z)
+                x_trend = np.linspace(self.df[x_col].min(), self.df[x_col].max(), 100)
+                fig.add_trace(go.Scatter(
+                    x=x_trend, y=p(x_trend),
+                    mode='lines', name='Trend Line',
+                    line=dict(color='red', dash='dash')
+                ))
+
+            return fig, f"Scatter plot created with correlation: {corr:.3f}"
+        except Exception as e:
+            return None, f"Error creating scatter plot: {str(e)}"
+
+    def create_correlation_matrix(self, selected_cols):
+        """Create correlation matrix heatmap"""
+        try:
+            numeric_cols = [col for col in selected_cols if col in self.analytics.numeric_cols]
+            if len(numeric_cols) < 2:
+                return None, "Need at least 2 numeric columns for correlation matrix"
+
+            corr_matrix = self.df[numeric_cols].corr()
+
+            fig = px.imshow(
+                corr_matrix,
+                text_auto=True,
+                aspect="auto",
+                color_continuous_scale='RdBu',
+                title="Correlation Matrix"
+            )
+
+            return fig, f"Correlation matrix for {len(numeric_cols)} variables"
+        except Exception as e:
+            return None, f"Error creating correlation matrix: {str(e)}"
+
+    def create_distribution_analysis(self, selected_cols):
+        """Create distribution analysis"""
+        try:
+            numeric_cols = [col for col in selected_cols if col in self.analytics.numeric_cols][:4]
+            if not numeric_cols:
+                return None, "No numeric columns selected"
+
+            n_cols = min(2, len(numeric_cols))
+            n_rows = (len(numeric_cols) + 1) // 2
+
+            fig = make_subplots(
+                rows=n_rows, cols=n_cols,
+                subplot_titles=[f"Distribution: {col}" for col in numeric_cols]
+            )
+
+            for i, col in enumerate(numeric_cols):
+                row = (i // n_cols) + 1
+                col_pos = (i % n_cols) + 1
+
+                fig.add_trace(go.Histogram(
+                    x=self.df[col], name=col,
+                    nbinsx=30, opacity=0.7
+                ), row=row, col=col_pos)
+
+            fig.update_layout(height=400*n_rows, showlegend=False)
+
+            return fig, f"Distribution analysis for {len(numeric_cols)} variables"
+        except Exception as e:
+            return None, f"Error creating distribution analysis: {str(e)}"
+
+    def create_predictive_model(self, target_col, predictor_cols):
+        """Create predictive model visualization"""
+        try:
+            if target_col not in self.analytics.numeric_cols:
+                return None, "Target must be numeric"
+
+            predictor_cols = [col for col in predictor_cols if col in self.analytics.numeric_cols and col != target_col]
+            if not predictor_cols:
+                return None, "Need at least one numeric predictor"
+
+            # Use first predictor for visualization
+            predictor = predictor_cols[0]
+
+            # Prepare data
+            data = self.df[[target_col, predictor]].dropna()
+            X = data[predictor].values.reshape(-1, 1)
+            y = data[target_col].values
+
+            # Fit model
+            model = LinearRegression()
+            model.fit(X, y)
+
+            # Predictions
+            X_pred = np.linspace(X.min(), X.max(), 100)
+            y_pred = model.predict(X_pred.reshape(-1, 1))
+
+            # Create visualization
+            fig = make_subplots(
+                rows=2, cols=2,
+                subplot_titles=[
+                    f"Regression: {predictor} → {target_col}",
+                    "Residuals Analysis",
+                    "Actual vs Predicted",
+                    "Model Performance"
+                ]
+            )
+
+            # Scatter plot with regression line
+            fig.add_trace(go.Scatter(
+                x=X.flatten(), y=y, mode='markers', name='Actual Data',
+                marker=dict(color='blue', opacity=0.6)
+            ), row=1, col=1)
+
+            fig.add_trace(go.Scatter(
+                x=X_pred.flatten(), y=y_pred, mode='lines', name='Predicted',
+                line=dict(color='red', width=2)
+            ), row=1, col=1)
+
+            # Residuals
+            y_pred_actual = model.predict(X)
+            residuals = y - y_pred_actual
+            fig.add_trace(go.Scatter(
+                x=y_pred_actual, y=residuals, mode='markers',
+                name='Residuals', marker=dict(color='green', opacity=0.6)
+            ), row=1, col=2)
+
+            # Actual vs Predicted
+            fig.add_trace(go.Scatter(
+                x=y, y=y_pred_actual, mode='markers',
+                name='Actual vs Predicted', marker=dict(color='purple', opacity=0.6)
+            ), row=2, col=1)
+
+            # Perfect prediction line
+            min_val, max_val = min(y.min(), y_pred_actual.min()), max(y.max(), y_pred_actual.max())
+            fig.add_trace(go.Scatter(
+                x=[min_val, max_val], y=[min_val, max_val],
+                mode='lines', name='Perfect Prediction',
+                line=dict(color='black', dash='dash')
+            ), row=2, col=1)
+
+            # R-squared indicator
+            r2 = r2_score(y, y_pred_actual)
+            fig.add_trace(go.Indicator(
+                mode="gauge+number",
+                value=r2,
+                domain={'x': [0, 1], 'y': [0, 1]},
+                title={'text': "R² Score"},
+                gauge={'axis': {'range': [None, 1]},
+                       'bar': {'color': "darkblue"},
+                       'steps': [{'range': [0, 0.5], 'color': "lightgray"},
+                                {'range': [0.5, 0.8], 'color': "yellow"},
+                                {'range': [0.8, 1], 'color': "green"}]}
+            ), row=2, col=2)
+
+            fig.update_layout(height=600, showlegend=True)
+
+            return fig, f"Predictive model: R² = {r2:.3f}, RMSE = {np.sqrt(np.mean(residuals**2)):.3f}"
+        except Exception as e:
+            return None, f"Error creating predictive model: {str(e)}"
+
+    def create_time_series_analysis(self, date_col, value_col):
+        """Create time series analysis"""
+        try:
+            if date_col not in self.analytics.datetime_cols:
+                return None, "Selected column is not datetime"
+            if value_col not in self.analytics.numeric_cols:
+                return None, "Value column must be numeric"
+
+            # Prepare data
+            ts_data = self.df[[date_col, value_col]].dropna().sort_values(date_col)
+
+            fig = make_subplots(
+                rows=2, cols=1,
+                subplot_titles=[f"Time Series: {value_col}", "Trend Analysis"],
+                vertical_spacing=0.1
+            )
+
+            # Main time series
+            fig.add_trace(go.Scatter(
+                x=ts_data[date_col], y=ts_data[value_col],
+                mode='lines+markers', name='Actual',
+                line=dict(color='blue', width=2)
+            ), row=1, col=1)
+
+            # Moving average if enough data
+            if len(ts_data) > 7:
+                ts_data['ma7'] = ts_data[value_col].rolling(window=7).mean()
+                fig.add_trace(go.Scatter(
+                    x=ts_data[date_col], y=ts_data['ma7'],
+                    mode='lines', name='7-period MA',
+                    line=dict(color='red', dash='dash')
+                ), row=1, col=1)
+
+            # Trend analysis
+            if len(ts_data) > 3:
+                x_numeric = np.arange(len(ts_data))
+                z = np.polyfit(x_numeric, ts_data[value_col], 1)
+                trend = np.poly1d(z)(x_numeric)
+
+                fig.add_trace(go.Scatter(
+                    x=ts_data[date_col], y=trend,
+                    mode='lines', name='Trend',
+                    line=dict(color='green', width=3)
+                ), row=2, col=1)
+
+            fig.update_layout(height=600, showlegend=True)
+
+            return fig, f"Time series analysis for {value_col}"
+        except Exception as e:
+            return None, f"Error creating time series: {str(e)}"
+
+
+# -------------------------
+# EXECUTIVE SUMMARY ENGINE (COMPLETE)
+# -------------------------
+
+class ExecutiveSummaryEngine:
+    """Lightweight executive summary engine used by the Streamlit app."""
+    def __init__(self, analytics):
+        self.analytics = analytics
+        self.df = analytics.df
+
+    def _score_styles(self):
+        """Return a dict of style -> score (0-100) based on dataset characteristics."""
+        scores = {
+            "Linear Narrative": 10,
+            "Drill-Down / Pyramid": 10,
+            "Exploratory / Detective": 10,
+            "Comparison / Contrast": 10,
+            "Problem–Cause–Solution": 10,
+            "Before–After": 10,
+            "Segmentation / Persona": 10,
+            "Diagnostic / Root Cause": 10,
+            "Framework-Based": 10,
+            "Visual Flow / Infographic": 10,
+            "Scenario / What-if": 10,
+            "Interactive": 10
+        }
+
+        # Boost styles based on characteristics
+        if len(self.analytics.datetime_cols) >= 1:
+            scores["Linear Narrative"] += 25
+            scores["Before–After"] += 20
+            scores["Scenario / What-if"] += 5
+
+        if len(self.analytics.categorical_cols) >= 2 and len(self.analytics.numeric_cols) >= 1:
+            scores["Segmentation / Persona"] += 25
+            scores["Comparison / Contrast"] += 15
+
+        if self.analytics.data_quality_issues:
+            scores["Problem–Cause–Solution"] += 30
+            scores["Diagnostic / Root Cause"] += 20
+
+        # If dataset is large, prefer Interactive / Visual Flow
+        if len(self.df) > 5000:
+            scores["Interactive"] += 20
+            scores["Visual Flow / Infographic"] += 10
+
+        # Normalize to 0-100
+        max_score = max(scores.values())
+        for k in scores:
+            scores[k] = int((scores[k] / max_score) * 100)
+
+        return scores
+
+    def _choose_style(self, scores):
+        """Choose the top style and compute a confidence value."""
+        sorted_styles = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        top_style, top_score = sorted_styles[0]
+        confidence = int(top_score)
+        return top_style, confidence
+
+    def _generate_key_metrics(self):
+        basic = self.analytics.insights['basic_stats']
+        metrics = {
+            'Total Records': f"{basic['rows']:,}",
+            'Columns': basic['columns'],
+            'Data Completeness': f"{100 - basic['missing_pct']:.1f}%"
+        }
+
+        if 'monetary' in self.analytics.insights:
+            metrics['Total Monetary Value'] = f"${self.analytics.insights['monetary']['total_value']:,.0f}"
+
+        return metrics
+
+    def _generate_content_by_style(self, style):
+        """Return a short narrative preview for the given style."""
+        previews = {
+            "Linear Narrative": "A chronological walkthrough highlighting temporal trends, seasonality, and change over time.",
+            "Drill-Down / Pyramid": "Start with high-level KPIs then drill into segments and contributing factors.",
+            "Exploratory / Detective": "Investigative narrative that surfaces anomalies, correlations, and unexpected patterns.",
+            "Comparison / Contrast": "Side-by-side comparison of segments with statistical evidence for differences.",
+            "Problem–Cause–Solution": "Identify the chief problem, explore root causes, and propose targeted remediation steps.",
+            "Before–After": "Compare key metrics across two time periods to quantify impact and change.",
+            "Segmentation / Persona": "Profile distinct customer segments and recommend segment-specific actions.",
+            "Diagnostic / Root Cause": "Analytical diagnosis using data to find likely drivers of outcomes.",
+            "Framework-Based": "Structured analysis guided by a business framework (e.g., 4Ps, SWOT, AARRR).",
+            "Visual Flow / Infographic": "Design an infographic-like narrative that maps process and metrics visually.",
+            "Scenario / What-if": "Present scenarios and model potential future outcomes with simple assumptions.",
+            "Interactive": "Recommend interactive exploration to let stakeholders slice and dice large datasets."
+        }
+        return previews.get(style, "Narrative preview not available.")
+
+    def generate_executive_summary(self):
+        """Generate a deterministic executive summary payload expected by the UI."""
+        scores = self._score_styles()
+        selected_style, confidence = self._choose_style(scores)
+
+        basic = self.analytics.insights['basic_stats']
+        key_metrics = self._generate_key_metrics()
+
+        # Actionable insights (simple deterministic rules)
+        insights = []
+        if self.analytics.data_quality_issues:
+            insights.append("Data quality issues detected — prioritize cleaning missing values and duplicates.")
+        else:
+            insights.append("Data appears clean and ready for analysis.")
+
+        # If monetary info exists, add revenue insight
+        if 'monetary' in self.analytics.insights:
+            insights.append(f"Average monetary value per record is {self.analytics.insights['monetary']['avg_value']:.2f}.")
+
+        # Risk assessment
+        risks = []
+        if 'missing_data' in self.analytics.data_quality_issues:
+            risks.append("Missing data may bias model estimates and reduce statistical power.")
+        if 'duplicates' in self.analytics.data_quality_issues:
+            risks.append("Duplicate records may inflate counts and distort aggregates.")
+
+        # Recommendations
+        recommendations = [
+            "Run focused data cleaning on high-missing columns.",
+            "Validate and remove duplicate records if they are false duplicates.",
+            "If building models, hold out a validation sample and evaluate with cross-validation."
+        ]
+
+        # Compose a short narrative content
+        content_lines = [
+            f"Executive summary (style: {selected_style})",
+            f"Dataset contains {basic['rows']:,} records and {basic['columns']} columns.",
+            f"Key focus: {self._generate_content_by_style(selected_style)}",
+            "\nTop recommendations:\n- " + "\n- ".join(recommendations)
+        ]
+
+        content = "\n\n".join(content_lines)
+
+        return {
+            'selected_style': selected_style,
+            'confidence': confidence,
+            'key_metrics': key_metrics,
+            'actionable_insights': insights,
+            'risk_assessment': risks,
+            'recommendations': recommendations,
+            'content': content,
+            'style_scores': scores
+        }
+
+
+# -------------------------
+# UTILITY FUNCTIONS
+# -------------------------
+
+def suggest_analysis_methods(analytics, selected_cols):
+    """Suggest optimal analysis methods based on selected columns"""
+    suggestions = []
+
+    numeric_cols = [col for col in selected_cols if col in analytics.numeric_cols]
+    categorical_cols = [col for col in selected_cols if col in analytics.categorical_cols]
+    datetime_cols = [col for col in selected_cols if col in analytics.datetime_cols]
+
+    # Correlation Analysis
+    if len(numeric_cols) >= 2:
+        suggestions.append({
+            'method': 'Correlation Analysis',
+            'description': f'Analyze relationships between {len(numeric_cols)} numeric variables',
+            'confidence': 'High',
+            'use_case': 'Identify which variables move together'
+        })
+
+    # Scatter Plot Analysis
+    if len(numeric_cols) >= 2:
+        suggestions.append({
+            'method': 'Scatter Plot Analysis',
+            'description': 'Visualize relationships between pairs of variables',
+            'confidence': 'High',
+            'use_case': 'Spot trends, outliers, and patterns'
+        })
+
+    # Distribution Analysis
+    if len(numeric_cols) >= 1:
+        suggestions.append({
+            'method': 'Distribution Analysis',
+            'description': f'Examine the distribution shape of {len(numeric_cols)} variables',
+            'confidence': 'High',
+            'use_case': 'Understand data spread and identify skewness'
+        })
+
+    # Predictive Modeling
+    if len(numeric_cols) >= 2:
+        suggestions.append({
+            'method': 'Predictive Modeling',
+            'description': 'Build regression models to predict one variable from others',
+            'confidence': 'Medium',
+            'use_case': 'Forecast values and understand driver relationships'
+        })
+
+    # Time Series Analysis
+    if len(datetime_cols) >= 1 and len(numeric_cols) >= 1:
+        suggestions.append({
+            'method': 'Time Series Analysis',
+            'description': 'Analyze trends and patterns over time',
+            'confidence': 'High',
+            'use_case': 'Identify seasonal patterns and forecast future values'
+        })
+
+    # Segmentation Analysis
+    if len(categorical_cols) >= 1 and len(numeric_cols) >= 1:
+        suggestions.append({
+            'method': 'Segmentation Analysis',
+            'description': 'Compare performance across different categories',
+            'confidence': 'High',
+            'use_case': 'Identify top/bottom performing segments'
+        })
+
+    return suggestions
+
+
+def generate_demo_data(demo_type):
+    """Generate different types of demo data"""
+    np.random.seed(42)
+
+    if demo_type == "E-commerce Sales":
+        n_records = 1000
+        return pd.DataFrame({
+            'order_id': [f'ORD{i:06d}' for i in range(1, n_records + 1)],
+            'customer_id': [f'CUST{i:05d}' for i in np.random.randint(1, 501, n_records)],
+            'product_category': np.random.choice(['Electronics', 'Clothing', 'Home', 'Books', 'Sports'], n_records),
+            'order_value': np.random.lognormal(4, 0.8, n_records),
+            'shipping_cost': np.random.uniform(5, 25, n_records),
+            'customer_age': np.random.randint(18, 75, n_records),
+            'customer_segment': np.random.choice(['Premium', 'Standard', 'Budget'], n_records),
+            'delivery_days': np.random.randint(1, 15, n_records),
+            'customer_rating': np.random.randint(1, 6, n_records),
+        })
+
+    elif demo_type == "Employee Data":
+        n_records = 500
+        return pd.DataFrame({
+            'employee_id': [f'EMP{i:04d}' for i in range(1, n_records + 1)],
+            'department': np.random.choice(['Engineering', 'Sales', 'Marketing', 'HR', 'Finance'], n_records),
+            'salary': np.random.normal(75000, 25000, n_records),
+            'age': np.random.randint(22, 65, n_records),
+            'years_experience': np.random.randint(0, 25, n_records),
+            'performance_score': np.random.normal(3.5, 0.8, n_records),
+            'job_satisfaction': np.random.randint(1, 11, n_records),
+        })
+
+    else:  # Default simple demo
+        n_records = 300
+        return pd.DataFrame({
+            'id': range(1, n_records + 1),
+            'category': np.random.choice(['A', 'B', 'C', 'D'], n_records),
+            'value': np.random.uniform(10, 100, n_records),
+            'score': np.random.randint(1, 11, n_records),
+            'amount': np.random.uniform(100, 1000, n_records)
+        })
+
+
+def render_welcome_screen():
+    """Render welcome screen when no data is loaded"""
+    st.markdown("### Welcome to Agentic Data Analytics Platform")
+
+    st.markdown("""
+    **🧠 Revolutionary Agentic AI System**
+    - Learns from previous analysis solutions
+    - Adapts existing methods to new data contexts  
+    - Continuously improves through experience
+    - Reuses successful analysis patterns
+    """)
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("""
+        **Smart Analytics**
+        - AI-powered insights
+        - Automatic pattern detection
+        - Executive summaries
+        """)
+
+    with col2:
+        st.markdown("""
+        **Agentic Learning**
+        - Agent-based methodology storage
+        - Similarity-based solution retrieval
+        - Continuous improvement loops
+        """)
+
+    with col3:
+        st.markdown("""
+        **Advanced Visualization**
+        - Complex chart generation
+        - Predictive modeling
+        - Interactive dashboards
+        """)
+
+    st.markdown("---")
+    st.markdown("Get Started: Upload a CSV file or try our demo data in the sidebar!")
+
+
+# -------------------------
+# AI conversation memory helper (keeps last 10)
+# -------------------------
+def ai_query_and_record(analytics, query, max_history=10):
+    """Send query to analytics while including recent history"""
+    if 'ai_chat_history' not in st.session_state:
+        st.session_state.ai_chat_history = []
+
+    # Build history text for context (most recent first)
+    history = st.session_state.ai_chat_history[-max_history:]
+    history_text = ""
+    if history:
+        pieces = []
+        for i, (q, r) in enumerate(history, start=1):
+            # keep responses short in context to avoid token explosion
+            short_r = (r[:1000] + '...') if isinstance(r, str) and len(r) > 1000 else r
+            pieces.append(f"Q{i}: {q}\nA{i}: {short_r}")
+        history_text = "\n\nPrevious conversations:\n" + "\n\n".join(pieces) + "\n\n"
+
+    full_query = history_text + "User query:\n" + query
+
+    # Use agentic query processing if available
+    if hasattr(analytics, 'process_agentic_query'):
+        result = analytics.process_agentic_query(full_query)
+        response = result.get('output', 'No response generated')
+    else:
+        # Fall back to regular AI query
+        response = analytics.query_data_with_ai(full_query)
+
+    # Record the actual user query and the full response
+    st.session_state.ai_chat_history.append((query, response))
+    # truncate to last max_history
+    st.session_state.ai_chat_history = st.session_state.ai_chat_history[-max_history:]
+
+    return response
+
+
+def main():
+    # Header
+    st.markdown('<div class="main-header">🧠 Agentic Data Analytics Platform</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">AI that learns, adapts, and improves through experience</div>', unsafe_allow_html=True)
+
+    # Initialize session state
+    if 'analytics' not in st.session_state:
+        st.session_state.analytics = None
+    if 'viz_engine' not in st.session_state:
+        st.session_state.viz_engine = None
+    if 'ai_chat_history' not in st.session_state:
+        st.session_state.ai_chat_history = []
+
+    # Sidebar
+    with st.sidebar:
+        st.header("🔧 Configuration")
+
+        # API Key for AI features
+        api_key = None
+        if LANGCHAIN_AVAILABLE:
+            api_key = st.text_input("OpenAI API Key (Required for Agentic AI)", type="password",
+                                  help="Required for agent learning and smart analysis")
+        else:
+            st.error("❌ LangChain not available. Install langchain packages for agentic features.")
+
+        st.subheader("📊 Load Data")
+
+        # File upload
+        uploaded_file = st.file_uploader("Upload CSV File", type="csv")
+
+        # URL input
+        data_url = st.text_input("Or enter CSV URL:")
+
+        # Demo data selector
+        demo_options = ["", "E-commerce Sales", "Employee Data", "Simple Demo"]
+        selected_demo = st.selectbox("Or try demo data:", demo_options)
+
+        # Load data buttons
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("Load Data", type="primary"):
+                df = None
+                try:
+                    if uploaded_file:
+                        df = pd.read_csv(uploaded_file)
+                        st.success("✅ File uploaded!")
+                    elif data_url:
+                        response = requests.get(data_url, timeout=30)
+                        df = pd.read_csv(io.StringIO(response.text))
+                        st.success("✅ Data loaded from URL!")
+
+                    if df is not None:
+                        initialize_analytics(df, api_key)
+
+                except Exception as e:
+                    st.error(f"❌ Error loading data: {str(e)}")
+
+        with col2:
+            if st.button("Demo Data") and selected_demo:
+                try:
+                    df = generate_demo_data(selected_demo)
+                    initialize_analytics(df, api_key)
+                    st.success(f"✅ Loaded {selected_demo}!")
+                except Exception as e:
+                    st.error(f"❌ Error loading demo: {str(e)}")
+
+        # Data info
+        if st.session_state.analytics:
+            st.subheader("📈 Dataset Info")
+            stats = st.session_state.analytics.insights['basic_stats']
+            st.metric("Rows", f"{stats['rows']:,}")
+            st.metric("Columns", stats['columns'])
+            st.metric("Missing Data", f"{stats['missing_pct']:.1f}%")
+
+            # Agentic system status
+            if hasattr(st.session_state.analytics, 'agent_store'):
+                st.subheader("🧠 Agent System")
+                agent_stats = st.session_state.analytics.agent_store.get_agent_stats()
+                st.metric("Available Agents", agent_stats['total_agents'])
+                st.metric("Learning Queue", agent_stats['staging_agents'])
+
+    # Main content
+    if st.session_state.analytics is not None:
+        render_main_content()
+    else:
+        render_welcome_screen()
+
+
+def initialize_analytics(df, api_key=None):
+    """Initialize enhanced agentic analytics engine"""
+    llm = None
+    if api_key and LANGCHAIN_AVAILABLE:
+        try:
+            llm = ChatOpenAI(openai_api_key=api_key, model="gpt-4-turbo", temperature=0.1)
+            st.success("🧠 AI system initialized with agentic capabilities!")
+        except Exception as e:
+            st.error(f"❌ Error initializing AI: {str(e)}")
+
+    # Use agentic analytics if LLM is available
+    if llm and api_key:
+        st.session_state.analytics = AgenticAnalytics(df, llm, api_key)
+        st.success("🚀 Agentic system activated! The AI will learn and improve from each analysis.")
+    else:
+        st.session_state.analytics = UniversalAnalytics(df, llm)
+        st.warning("⚠️ Running in basic mode. Provide API key for full agentic capabilities.")
+    
+    st.session_state.viz_engine = SmartVisualizationEngine(st.session_state.analytics)
+
+
+def render_main_content():
+    """Render the main content tabs"""
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+        "🧠 Agentic AI",
+        "📊 Executive Summary",
+        "📈 Dashboard", 
+        "🔍 Data Quality", 
+        "🚀 Advanced Analytics", 
+        "🎨 Custom Charts", 
+        "🗂️ Data Explorer",
+        "⚙️ Agent Management"
+    ])
+
+    with tab1:
+        render_agentic_ai_assistant()
+
+    with tab2:
+        render_executive_summary()
+
+    with tab3:
+        render_dashboard()
+
+    with tab4:
+        render_data_quality_tab()
+
+    with tab5:
+        render_advanced_analytics()
+
+    with tab6:
+        render_custom_charts()
+
+    with tab7:
+        render_data_explorer()
+
+    with tab8:
+        render_agent_management()
+
+
+def render_agentic_ai_assistant():
+    """Enhanced AI assistant with agentic capabilities"""
+    st.subheader("🧠 Agentic AI Data Scientist")
+
+    analytics = st.session_state.analytics
+
+    if not hasattr(analytics, 'agent_store'):
+        st.warning("⚠️ Agentic capabilities require OpenAI API key. Using basic AI mode.")
+        render_basic_ai_assistant()
+        return
+
+    st.markdown("""
+    **Revolutionary AI that learns and adapts**
+    
+    This AI system:
+    - 🔍 Searches for similar past solutions
+    - 🎯 Adapts existing methods to your data
+    - 🧠 Learns new patterns when needed
+    - 📚 Builds a knowledge base over time
+    """)
+
+    # Query input
+    st.markdown("### 💬 Ask Your Question")
+    
+    # Quick action buttons
+    st.markdown("**🚀 Quick Analysis Actions:**")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        if st.button("🔗 Find Correlations"):
+            query = "Find strong correlations between numeric variables and explain their business implications"
+            result = analytics.process_agentic_query(query)
+            display_agentic_result(result)
     
     with col2:
-        if st.button("🎲 Demo Data"):
-            np.random.seed(42)
-            st.session_state.df = pd.DataFrame({
-                "fan_id": [f"FAN{i:05d}" for i in range(1, 501)],
-                "age": np.random.randint(18, 70, 500),
-                "favorite_team": np.random.choice(["Cowboys","Patriots","Packers","Chiefs","Steelers","Giants"], 500),
-                "fan_loyalty_score": np.random.randint(20, 100, 500),
-                "avg_ticket_spend": np.random.uniform(50, 400, 500),
-                "concession_spend": np.random.uniform(20, 100, 500),
-                "merch_spend_2024": np.random.uniform(0, 500, 500),
-                "income_bracket": np.random.choice(["<40k","40-80k","80-120k","120k+"], 500),
-                "games_attended_2024": np.random.randint(0, 12, 500),
-                "primary_channel": np.random.choice(["ESPN","Fox","NBC","CBS","NFL Network"], 500),
-                "season_ticket_holder": np.random.choice([True, False], 500),
-                "years_as_fan": np.random.randint(1, 40, 500)
-            })
-            st.session_state.analytics = IntelligentNFLAnalytics(st.session_state.df)
-            st.session_state.viz_engine = SmartVizEngine(st.session_state.df)
-            st.success("✅ Demo data generated!")
+        if st.button("📈 Detect Outliers"):
+            query = "Detect outliers in the data using multiple methods and provide recommendations"
+            result = analytics.process_agentic_query(query)
+            display_agentic_result(result)
+    
+    with col3:
+        if st.button("🎯 Build Prediction"):
+            query = "Build a predictive model to forecast the main outcome variable"
+            result = analytics.process_agentic_query(query)
+            display_agentic_result(result)
+    
+    with col4:
+        if st.button("📊 Create Dashboard"):
+            query = "Create a comprehensive analysis dashboard with key insights and visualizations"
+            result = analytics.process_agentic_query(query)
+            display_agentic_result(result)
 
-# Main content area
-if st.session_state.df is not None and st.session_state.analytics is not None:
+    # Main query interface
+    st.markdown("---")
+    user_query = st.text_area(
+        "🎯 **Describe your analysis goal:**",
+        placeholder="""Examples:
+• "Compare sales performance across different customer segments"
+• "Find the main drivers of customer satisfaction scores"
+• "Create a forecast for next quarter's revenue"
+• "Identify unusual patterns in the transaction data"
+• "Build a model to predict customer churn risk"
+""",
+        height=120
+    )
+
+    if st.button("🧠 Analyze with Agentic AI", type="primary") and user_query:
+        with st.spinner("🔍 Searching for similar solutions and learning..."):
+            try:
+                result = analytics.process_agentic_query(user_query)
+                display_agentic_result(result)
+                
+            except Exception as e:
+                st.error(f"❌ Analysis error: {str(e)}")
+
+    # Recent interactions
+    if hasattr(analytics, 'interaction_log') and analytics.interaction_log:
+        with st.expander("📜 Recent Analysis History"):
+            for i, interaction in enumerate(analytics.interaction_log[-5:], 1):
+                method = interaction['result'].get('method', 'unknown')
+                success = interaction['result'].get('success', False)
+                
+                status_icon = "✅" if success else "❌"
+                method_text = "🔄 Reused Agent" if method == 'agent_reuse' else "🧠 New Learning"
+                
+                st.markdown(f"**{i}. {status_icon} {method_text}**")
+                st.markdown(f"*Query:* {interaction['query'][:100]}...")
+                
+                if method == 'agent_reuse':
+                    agent_name = interaction['result'].get('agent_used', 'Unknown')
+                    similarity = interaction['result'].get('similarity', 0)
+                    st.markdown(f"*Used Agent:* {agent_name} (similarity: {similarity:.2f})")
+                elif method == 'new_learning':
+                    if interaction['result'].get('new_agent_created'):
+                        st.markdown(f"*Created New Agent:* {interaction['result'].get('new_agent_title', 'Unnamed')}")
+                
+                st.markdown("---")
+
+
+def display_agentic_result(result):
+    """Display the result of an agentic query"""
+    if not result:
+        st.error("No result returned")
+        return
     
-    # Navigation tabs
-    tab1, tab2, tab3 = st.tabs(["📊 Smart Dashboard", "🤖 AI Assistant", "📈 Custom Analysis"])
+    method = result.get('method', 'unknown')
+    success = result.get('success', False)
     
-    # Tab 1: Smart Dashboard
-    with tab1:
-        st.subheader("📊 Intelligent Dashboard")
+    if method == 'agent_reuse':
+        st.markdown(f"""
+        <div class="agent-success">
+        ✅ <strong>Agent Reused Successfully</strong><br>
+        🤖 Agent: {result.get('agent_used', 'Unknown')}<br>
+        🎯 Similarity: {result.get('similarity', 0):.1%}<br>
+        💡 This solution was learned from previous successful analyses
+        </div>
+        """, unsafe_allow_html=True)
         
-        # Key metrics in columns
+    elif method == 'new_learning':
+        st.markdown(f"""
+        <div class="agent-learning">
+        🧠 <strong>New Solution Learned</strong><br>
+        🆕 Created: {result.get('new_agent_title', 'New Analysis Method')}<br>
+        📚 Added to knowledge base for future use<br>
+        🎯 This solution will be reused for similar future queries
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Display the main output
+    st.markdown("### 📊 Analysis Results")
+    output = result.get('output', 'No output generated')
+    st.markdown(output)
+    
+    # Display any figures
+    if 'figure' in result:
+        st.plotly_chart(result['figure'], use_container_width=True)
+
+
+def render_basic_ai_assistant():
+    """Fallback basic AI assistant when agentic features aren't available"""
+    st.markdown("**Basic AI Assistant Mode**")
+    st.info("💡 Enable agentic capabilities by providing an OpenAI API key in the sidebar")
+    
+    analytics = st.session_state.analytics
+    
+    if not analytics.llm:
+        st.warning("AI Assistant requires an OpenAI API key. Please enter your key in the sidebar.")
+        return
+
+    # Basic AI interface (same as before)
+    user_input = st.text_area(
+        "Describe your analysis need:",
+        placeholder="Ask questions about your data...",
+        height=120
+    )
+
+    if st.button("🤖 Analyze with Basic AI", type="primary") and user_input:
+        with st.spinner("🤖 Basic AI is working on your analysis..."):
+            try:
+                response = ai_query_and_record(analytics, user_input)
+                st.markdown("### 🎯 Analysis Results")
+                st.markdown(response)
+            except Exception as e:
+                st.error(f"Analysis error: {str(e)}")
+
+
+def render_executive_summary():
+    """Render intelligent executive summary with adaptive narrative styles"""
+    st.subheader("Executive Summary")
+
+    analytics = st.session_state.analytics
+
+    # Initialize executive summary engine
+    if 'exec_summary_engine' not in st.session_state:
+        st.session_state.exec_summary_engine = ExecutiveSummaryEngine(analytics)
+
+    exec_engine = st.session_state.exec_summary_engine
+
+    # Generate summary button
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        if st.button("Generate Executive Summary", type="primary"):
+            with st.spinner("Analyzing data and generating executive summary..."):
+                st.session_state.executive_summary = exec_engine.generate_executive_summary()
+                st.success("Executive summary generated!")
+                st.rerun()
+
+    with col2:
+        if st.button("Refresh Analysis"):
+            st.session_state.exec_summary_engine = ExecutiveSummaryEngine(analytics)
+            if 'executive_summary' in st.session_state:
+                del st.session_state.executive_summary
+            st.success("Analysis refreshed!")
+
+    with col3:
+        if st.button("Style Comparison"):
+            st.session_state.show_style_comparison = True
+            st.rerun()
+
+    # Display executive summary if generated
+    if 'executive_summary' in st.session_state:
+        summary = st.session_state.executive_summary
+
+        # Header with key info
         col1, col2, col3, col4 = st.columns(4)
-        insights = st.session_state.analytics.insights
+
+        with col1:
+            st.metric("Selected Style", summary['selected_style'])
+
+        with col2:
+            st.metric("Confidence", f"{summary['confidence']:.0f}%")
+
+        with col3:
+            total_records = summary['key_metrics'].get('Total Records', '0')
+            st.metric("Data Scale", total_records)
+
+        with col4:
+            quality = summary['key_metrics'].get('Data Completeness', '0%')
+            st.metric("Data Quality", quality)
+
+        # Main narrative content
+        st.markdown("---")
+        st.markdown("### Executive Narrative")
+
+        # Display main content
+        st.markdown(summary['content'])
+
+        # Key metrics section
+        st.markdown("---")
+        st.markdown("### Key Performance Indicators")
+
+        metrics = summary['key_metrics']
+        metric_cols = st.columns(len(metrics))
+
+        for i, (metric, value) in enumerate(metrics.items()):
+            with metric_cols[i % len(metric_cols)]:
+                st.metric(metric, value)
+
+        # Insights and recommendations
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("### Actionable Insights")
+            for insight in summary['actionable_insights']:
+                st.markdown(f"• {insight}")
+
+            if summary['risk_assessment']:
+                st.markdown("### Risk Assessment")
+                for risk in summary['risk_assessment']:
+                    st.markdown(f"⚠️ {risk}")
+
+        with col2:
+            st.markdown("### Strategic Recommendations")
+            for i, rec in enumerate(summary['recommendations'], 1):
+                st.markdown(f"{i}. {rec}")
+
+    # Style comparison view
+    if st.session_state.get('show_style_comparison', False):
+        st.markdown("---")
+        st.markdown("### Narrative Style Comparison")
+
+        if 'executive_summary' in st.session_state:
+            style_scores = st.session_state.executive_summary['style_scores']
+
+            # Create a bar chart of style scores
+            df_scores = pd.DataFrame([
+                {'Style': style, 'Score': score} 
+                for style, score in style_scores.items()
+            ]).sort_values('Score', ascending=True)
+
+            fig = px.bar(
+                df_scores, 
+                x='Score', 
+                y='Style', 
+                orientation='h',
+                title="Narrative Style Suitability Scores",
+                color='Score',
+                color_continuous_scale='Blues'
+            )
+
+            fig.update_layout(height=500)
+            st.plotly_chart(fig, use_container_width=True)
+
+        if st.button("Hide Style Comparison"):
+            st.session_state.show_style_comparison = False
+            st.rerun()
+
+
+def render_dashboard():
+    """Clean, focused dashboard"""
+    analytics = st.session_state.analytics
+    insights = analytics.insights
+
+    # Key Metrics
+    st.subheader("Executive Dashboard")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("Total Records", f"{insights['basic_stats']['rows']:,}")
+
+    with col2:
+        st.metric("Columns", insights['basic_stats']['columns'])
+
+    with col3:
+        if 'monetary' in insights:
+            st.metric("Total Value", f"${insights['monetary']['total_value']:,.0f}")
+        else:
+            st.metric("Numeric Cols", insights['column_types']['numeric'])
+
+    with col4:
+        missing_pct = insights['basic_stats']['missing_pct']
+        st.metric("Data Quality", f"{100 - missing_pct:.1f}%")
+
+    # Data Quality Section
+    st.markdown("---")
+    st.subheader("Data Quality")
+
+    quality_status, quality_report = analytics.get_data_quality_report()
+
+    if quality_status == "excellent":
+        st.markdown(f'<div class="data-quality-excellent">{quality_report}</div>', unsafe_allow_html=True)
+    elif quality_status in ["good", "fair"]:
+        st.markdown(f'<div class="data-quality-warning">{quality_report}</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="data-quality-poor">{quality_report}</div>', unsafe_allow_html=True)
+
+    # Quick actions
+    if quality_status != "excellent":
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Clean Duplicates"):
+                result = analytics.clean_duplicates()
+                st.success(result)
+                st.rerun()
+        with col2:
+            if st.button("Refresh Quality Check"):
+                analytics.check_data_quality()
+                st.success("Quality check refreshed!")
+                st.rerun()
+
+    # Quick Insights
+    st.markdown("---")
+    st.subheader("Quick Insights")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**Column Summary**")
+        st.write(f"Numeric columns: {len(analytics.numeric_cols)}")
+        st.write(f"Categorical columns: {len(analytics.categorical_cols)}")
+        st.write(f"DateTime columns: {len(analytics.datetime_cols)}")
+
+    with col2:
+        st.markdown("**Data Summary**")
+        if analytics.numeric_cols:
+            primary_col = analytics.numeric_cols[0]
+            mean_val = analytics.df[primary_col].mean()
+            st.write(f"Average {primary_col}: {mean_val:.2f}")
+
+
+def render_data_quality_tab():
+    """Render comprehensive data quality analysis"""
+    st.subheader("Data Quality Analysis")
+    
+    analytics = st.session_state.analytics
+    
+    # Quality overview
+    quality_status, quality_report = analytics.get_data_quality_report()
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if quality_status == "excellent":
+            st.success("Excellent Data Quality")
+        elif quality_status in ["good", "fair"]:
+            st.warning(f"Data Quality: {quality_status.title()}")
+        else:
+            st.error("Poor Data Quality")
+    
+    with col2:
+        missing_pct = analytics.insights['basic_stats']['missing_pct']
+        st.metric("Data Completeness", f"{100 - missing_pct:.1f}%")
+    
+    with col3:
+        total_issues = len(analytics.data_quality_issues)
+        st.metric("Issues Detected", total_issues)
+    
+    # Detailed quality analysis
+    st.markdown("---")
+    st.markdown("### Detailed Quality Assessment")
+    
+    if analytics.data_quality_issues:
+        # Missing data analysis
+        if 'missing_data' in analytics.data_quality_issues:
+            st.markdown("#### Missing Data Analysis")
+            missing_data = analytics.data_quality_issues['missing_data']
+            
+            # Create missing data visualization
+            missing_df = pd.DataFrame([
+                {'Column': col, 'Missing_Count': info['count'], 'Missing_Percentage': info['percentage']}
+                for col, info in missing_data.items()
+            ]).sort_values('Missing_Percentage', ascending=False)
+            
+            fig = px.bar(missing_df, x='Missing_Percentage', y='Column', orientation='h',
+                        title="Missing Data by Column", 
+                        labels={'Missing_Percentage': 'Missing %', 'Column': 'Columns'})
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Missing data recommendations
+            st.markdown("**Recommendations:**")
+            high_missing = missing_df[missing_df['Missing_Percentage'] > 50]
+            if not high_missing.empty:
+                st.warning(f"Consider removing columns with >50% missing: {', '.join(high_missing['Column'].tolist())}")
+            
+            medium_missing = missing_df[(missing_df['Missing_Percentage'] > 10) & (missing_df['Missing_Percentage'] <= 50)]
+            if not medium_missing.empty:
+                st.info(f"Consider imputation for: {', '.join(medium_missing['Column'].tolist())}")
+        
+        # Duplicate analysis
+        if 'duplicates' in analytics.data_quality_issues:
+            st.markdown("#### Duplicate Records Analysis")
+            dup_info = analytics.data_quality_issues['duplicates']
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Duplicate Records", f"{dup_info['count']:,}")
+            with col2:
+                st.metric("Duplicate Percentage", f"{dup_info['percentage']:.1f}%")
+            
+            if st.button("Remove Duplicates", type="primary"):
+                result = analytics.clean_duplicates()
+                st.success(result)
+                st.rerun()
+        
+        # Outlier analysis
+        if 'outliers' in analytics.data_quality_issues:
+            st.markdown("#### Outlier Detection Summary")
+            outlier_data = analytics.data_quality_issues['outliers']
+            
+            outlier_df = pd.DataFrame([
+                {'Column': col, 'Outlier_Count': info['count'], 'Outlier_Percentage': info['percentage']}
+                for col, info in outlier_data.items()
+            ]).sort_values('Outlier_Percentage', ascending=False)
+            
+            fig = px.bar(outlier_df, x='Outlier_Percentage', y='Column', orientation='h',
+                        title="Outliers by Column", 
+                        labels={'Outlier_Percentage': 'Outlier %', 'Column': 'Columns'})
+            st.plotly_chart(fig, use_container_width=True)
+    
+    else:
+        st.success("No data quality issues detected! Your dataset is in excellent condition.")
+    
+    # Data profiling section
+    st.markdown("---")
+    st.markdown("### Data Profiling")
+    
+    selected_col = st.selectbox("Select column for detailed profiling:", analytics.df.columns)
+    
+    if selected_col:
+        col_data = analytics.df[selected_col]
+        
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric("📋 Total Records", f"{insights['total_records']:,}")
+            st.metric("Unique Values", col_data.nunique())
         with col2:
-            if 'avg_customer_value' in insights:
-                st.metric("💰 Avg Customer Value", f"${insights['avg_customer_value']:,.0f}")
+            st.metric("Missing Values", col_data.isnull().sum())
         with col3:
-            if 'high_spender_revenue_share' in insights:
-                st.metric("🎯 Top 20% Revenue Share", f"{insights['high_spender_revenue_share']:.1f}%")
+            st.metric("Data Type", str(col_data.dtype))
         with col4:
-            st.metric("🔍 Data Quality", f"{100-insights['missing_data_pct']:.1f}%")
+            completion_rate = (1 - col_data.isnull().sum() / len(col_data)) * 100
+            st.metric("Completion Rate", f"{completion_rate:.1f}%")
         
-        # Data story
-        st.markdown("### 📖 Data Story")
-        story_points = st.session_state.analytics.get_data_story()
-        for point in story_points:
-            st.markdown(f'<div class="insight-box">{point}</div>', unsafe_allow_html=True)
-        
-        # Interactive dashboard
-        st.session_state.analytics.create_intelligent_dashboard()
-        
-        # Data preview
-        with st.expander("🔍 Data Preview"):
-            st.dataframe(st.session_state.df.head(100), use_container_width=True)
-
-    # Tab 2: AI Assistant
-    with tab2:
-        st.subheader("🤖 Intelligent AI Assistant")
-        
-        # API key input
-        api_key = st.text_input("🔑 OpenAI API Key", type="password", help="Enter your OpenAI API key to enable AI chat")
-        
-        if api_key:
-            # Initialize AI components
-            if "enhanced_llm" not in st.session_state:
-                st.session_state.enhanced_llm = ChatOpenAI(
-                    openai_api_key=api_key, 
-                    model="gpt-4-turbo", 
-                    temperature=0.1
-                )
-                st.session_state.enhanced_agent = create_enhanced_agent(
-                    st.session_state.enhanced_llm, 
-                    st.session_state.df, 
-                    st.session_state.analytics
-                )
-                st.session_state.chat_history = []
+        # Column-specific analysis
+        if selected_col in analytics.numeric_cols:
+            # Numeric column analysis
+            st.markdown("#### Numeric Analysis")
+            col1, col2 = st.columns(2)
             
-            # Chat interface
-            col1, col2 = st.columns([3, 1])
             with col1:
-                user_query = st.text_input("💬 Ask anything about your data:", placeholder="e.g., 'Show me revenue by team' or 'What drives customer loyalty?'")
+                st.markdown("**Statistical Summary:**")
+                st.write(col_data.describe())
+            
             with col2:
-                ask_button = st.button("🚀 Ask", type="primary")
-                clear_button = st.button("🗑️ Clear")
+                # Distribution plot
+                fig = px.histogram(analytics.df, x=selected_col, title=f"Distribution: {selected_col}")
+                st.plotly_chart(fig, use_container_width=True)
+        
+        elif selected_col in analytics.categorical_cols:
+            # Categorical column analysis
+            st.markdown("#### Categorical Analysis")
             
-            if clear_button:
-                st.session_state.chat_history = []
-                st.rerun()
+            value_counts = col_data.value_counts().head(10)
             
-            if ask_button and user_query:
-                with st.spinner("🤔 Analyzing your data..."):
-                    # Try smart visualization first
-                    fig, viz_msg = st.session_state.viz_engine.auto_visualize(user_query)
-                    
-                    if fig:
-                        st.session_state.chat_history.append(("You", user_query))
-                        st.session_state.chat_history.append(("AI", viz_msg))
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        # Fall back to AI agent
-                        try:
-                            response = st.session_state.enhanced_agent.run(user_query)
-                            st.session_state.chat_history.append(("You", user_query))
-                            st.session_state.chat_history.append(("AI", str(response)))
-                        except Exception as e:
-                            st.session_state.chat_history.append(("You", user_query))
-                            st.session_state.chat_history.append(("AI", f"❌ I encountered an issue: {str(e)}. Try rephrasing your question."))
+            col1, col2 = st.columns(2)
             
-            # Display chat history
-            if st.session_state.chat_history:
-                st.markdown("### 💬 Conversation History")
-                for i, (role, message) in enumerate(reversed(st.session_state.chat_history[-10:])):  # Show last 10 exchanges
-                    if role == "You":
-                        st.markdown(f"**🧑 You:** {message}")
-                    else:
-                        st.markdown(f"**🤖 AI:** {message}")
-                    if i < len(st.session_state.chat_history) - 1:
-                        st.markdown("---")
-        else:
-            st.info("🔑 Please enter your OpenAI API key to start chatting with the AI assistant.")
+            with col1:
+                st.markdown("**Top 10 Values:**")
+                st.write(value_counts)
             
-            # Sample questions without API
-            st.markdown("### 💡 Example Questions You Can Ask:")
-            example_questions = [
-                "📊 Show me revenue distribution by age group",
-                "🔍 What's the correlation between loyalty and spending?",
-                "📈 Compare team popularity across different segments",
-                "💰 Who are my highest value customers?",
-                "📉 Show me spending trends over time",
-                "🎯 Create customer segments based on behavior"
-            ]
-            
-            for question in example_questions:
-                if st.button(question, key=f"example_{question}"):
-                    if not api_key:
-                        # Try visualization without AI
-                        fig, viz_msg = st.session_state.viz_engine.auto_visualize(question)
-                        if fig:
-                            st.success(viz_msg)
-                            st.plotly_chart(fig, use_container_width=True)
-                        else:
-                            st.warning("This analysis requires the AI assistant. Please add your API key.")
+            with col2:
+                # Bar chart
+                fig = px.bar(x=value_counts.index, y=value_counts.values, 
+                           title=f"Top Values: {selected_col}")
+                st.plotly_chart(fig, use_container_width=True)
 
-    # Tab 3: Custom Analysis
-    with tab3:
-        st.subheader("📈 Custom Data Analysis")
+
+def render_advanced_analytics():
+    """Enhanced advanced analytics tab with categorical analysis and user guidance"""
+    st.subheader("Advanced Analytics")
+
+    analytics = st.session_state.analytics
+    viz_engine = st.session_state.viz_engine
+
+    # Column Selection
+    st.markdown("### Step 1: Select Columns for Analysis")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        available_cols = analytics.df.columns.tolist()
+        selected_cols = st.multiselect(
+            "Choose columns to analyze:",
+            available_cols,
+            default=available_cols[:5],
+            help="Select the columns you want to include in your analysis"
+        )
+
+    with col2:
+        if selected_cols:
+            st.markdown("**Selected Columns:**")
+            for col in selected_cols:
+                col_type = "Numeric" if col in analytics.numeric_cols else "Categorical" if col in analytics.categorical_cols else "DateTime" if col in analytics.datetime_cols else "Other"
+                st.write(f"• {col} ({col_type})")
+
+    if not selected_cols:
+        st.warning("Please select at least one column to proceed with analysis.")
+        return
+
+    # Method Suggestions
+    st.markdown("---")
+    st.markdown("### Step 2: Recommended Analysis Methods")
+
+    suggestions = suggest_analysis_methods(analytics, selected_cols)
+
+    if not suggestions:
+        st.info("No analysis methods available for the selected columns. Try selecting different column types.")
+        return
+
+    # Display methods
+    for i, suggestion in enumerate(suggestions):
+        with st.expander(f"📊 {suggestion['method']} (Confidence: {suggestion['confidence']})", expanded=False):
+            col1, col2 = st.columns([3, 1])
+
+            with col1:
+                st.markdown(f"**Description:** {suggestion['description']}")
+                st.markdown(f"**Use Case:** {suggestion['use_case']}")
+
+            with col2:
+                method_key = f"method_{i}"
+
+                if st.button(f"Run Analysis", key=f"run_{method_key}", type="primary"):
+                    with st.spinner(f"Running {suggestion['method']}..."):
+                        try:
+                            fig, message = run_simple_analysis(suggestion['method'], selected_cols, viz_engine, analytics)
+
+                            if fig:
+                                st.plotly_chart(fig, use_container_width=True)
+                                st.success(message)
+                            else:
+                                st.error(message)
+
+                        except Exception as e:
+                            st.error(f"Error running analysis: {str(e)}")
+
+
+def run_simple_analysis(method, selected_cols, viz_engine, analytics):
+    """Run simple analysis methods without user configuration"""
+    numeric_cols = [col for col in selected_cols if col in analytics.numeric_cols]
+    categorical_cols = [col for col in selected_cols if col in analytics.categorical_cols]
+
+    if method == 'Correlation Analysis':
+        return viz_engine.create_correlation_matrix(selected_cols)
+
+    elif method == 'Distribution Analysis':
+        return viz_engine.create_distribution_analysis(selected_cols)
+
+    elif method == 'Scatter Plot Analysis' and len(numeric_cols) >= 2:
+        color_col = categorical_cols[0] if categorical_cols else None
+        return viz_engine.create_scatter_plot(numeric_cols[0], numeric_cols[1], color_col)
+
+    elif method == 'Predictive Modeling' and len(numeric_cols) >= 2:
+        target = numeric_cols[-1]
+        predictors = numeric_cols[:-1]
+        return viz_engine.create_predictive_model(target, predictors)
+
+    elif method == 'Time Series Analysis':
+        datetime_cols = [col for col in selected_cols if col in analytics.datetime_cols]
+        if datetime_cols and numeric_cols:
+            return viz_engine.create_time_series_analysis(datetime_cols[0], numeric_cols[0])
+
+    return None, "Unable to run analysis with current selection"
+
+
+def render_custom_charts():
+    """Render custom charts interface"""
+    st.subheader("Custom Chart Builder")
+
+    analytics = st.session_state.analytics
+    viz_engine = st.session_state.viz_engine
+
+    col1, col2 = st.columns([1, 2])
+
+    with col1:
+        st.markdown("**Chart Configuration**")
+
+        chart_type = st.selectbox("Chart Type", [
+            "Scatter Plot",
+            "Correlation Matrix",
+            "Distribution Analysis",
+            "Predictive Model",
+            "Time Series"
+        ])
+
+        if chart_type == "Scatter Plot":
+            if len(analytics.numeric_cols) >= 2:
+                x_col = st.selectbox("X-axis", analytics.numeric_cols)
+                y_col = st.selectbox("Y-axis", analytics.numeric_cols)
+                color_col = st.selectbox("Color by (optional)", [None] + analytics.categorical_cols)
+
+                if st.button("Create Chart", type="primary"):
+                    fig, message = viz_engine.create_scatter_plot(x_col, y_col, color_col)
+                    if fig:
+                        st.session_state.current_chart = fig
+                        st.session_state.chart_message = message
+            else:
+                st.warning("Need at least 2 numeric columns for scatter plot")
+
+        elif chart_type == "Correlation Matrix":
+            selected_cols = st.multiselect("Select columns", analytics.numeric_cols, default=analytics.numeric_cols[:5])
+
+            if st.button("Create Chart", type="primary"):
+                fig, message = viz_engine.create_correlation_matrix(selected_cols)
+                if fig:
+                    st.session_state.current_chart = fig
+                    st.session_state.chart_message = message
+
+        elif chart_type == "Distribution Analysis":
+            selected_cols = st.multiselect("Select columns", analytics.numeric_cols, default=analytics.numeric_cols[:3])
+
+            if st.button("Create Chart", type="primary"):
+                fig, message = viz_engine.create_distribution_analysis(selected_cols)
+                if fig:
+                    st.session_state.current_chart = fig
+                    st.session_state.chart_message = message
+
+        elif chart_type == "Predictive Model":
+            if len(analytics.numeric_cols) >= 2:
+                target_col = st.selectbox("Target variable", analytics.numeric_cols)
+                predictor_cols = st.multiselect("Predictor variables", 
+                                              [col for col in analytics.numeric_cols if col != target_col],
+                                              default=[col for col in analytics.numeric_cols if col != target_col][:2])
+
+                if st.button("Create Chart", type="primary"):
+                    if predictor_cols:
+                        fig, message = viz_engine.create_predictive_model(target_col, predictor_cols)
+                        if fig:
+                            st.session_state.current_chart = fig
+                            st.session_state.chart_message = message
+                    else:
+                        st.error("Please select at least one predictor variable")
+            else:
+                st.warning("Need at least 2 numeric columns for predictive modeling")
+
+        elif chart_type == "Time Series":
+            if analytics.datetime_cols and analytics.numeric_cols:
+                date_col = st.selectbox("Date column", analytics.datetime_cols)
+                value_col = st.selectbox("Value column", analytics.numeric_cols)
+
+                if st.button("Create Chart", type="primary"):
+                    fig, message = viz_engine.create_time_series_analysis(date_col, value_col)
+                    if fig:
+                        st.session_state.current_chart = fig
+                        st.session_state.chart_message = message
+            else:
+                st.warning("Need datetime and numeric columns for time series analysis")
+
+    with col2:
+        if hasattr(st.session_state, 'current_chart'):
+            st.plotly_chart(st.session_state.current_chart, use_container_width=True)
+            if hasattr(st.session_state, 'chart_message'):
+                st.success(st.session_state.chart_message)
+        else:
+            st.info("Configure and create a chart to see it here")
+
+
+def render_data_explorer():
+    """Render data explorer"""
+    st.subheader("Data Explorer")
+
+    analytics = st.session_state.analytics
+    df = analytics.df
+
+    col1, col2 = st.columns([1, 3])
+
+    with col1:
+        st.markdown("**Filters**")
+
+        selected_cols = st.multiselect("Columns to view", 
+                                     df.columns.tolist(), 
+                                     default=df.columns.tolist()[:10])
+
+        row_limit = st.slider("Rows to show", 10, min(1000, len(df)), 100)
+
+        view_type = st.radio("View type", ["Head", "Sample", "Tail"])
+
+        search_term = st.text_input("Search in data:")
+
+        # Filter by column values
+        st.markdown("**Column Filters**")
+        active_filters = {}
+        
+        for col in selected_cols[:3]:  # Limit to first 3 columns for UI space
+            if col in analytics.categorical_cols:
+                unique_values = df[col].dropna().unique()
+                if len(unique_values) <= 20:  # Only show filter for columns with reasonable number of unique values
+                    selected_values = st.multiselect(f"Filter {col}:", unique_values)
+                    if selected_values:
+                        active_filters[col] = selected_values
+
+    with col2:
+        try:
+            display_df = df[selected_cols] if selected_cols else df
+
+            # Apply column filters
+            for col, values in active_filters.items():
+                display_df = display_df[display_df[col].isin(values)]
+
+            # Apply search filter
+            if search_term:
+                text_cols = display_df.select_dtypes(include=['object']).columns
+                if len(text_cols) > 0:
+                    mask = display_df[text_cols].astype(str).apply(
+                        lambda x: x.str.contains(search_term, case=False, na=False)
+                    ).any(axis=1)
+                    display_df = display_df[mask]
+
+            # Apply view type
+            if view_type == "Head":
+                display_df = display_df.head(row_limit)
+            elif view_type == "Tail":
+                display_df = display_df.tail(row_limit)
+            else:
+                display_df = display_df.sample(min(row_limit, len(display_df))) if len(display_df) > 0 else display_df
+
+            st.dataframe(display_df, use_container_width=True)
+
+            # Statistics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Showing Rows", len(display_df))
+            with col2:
+                st.metric("Total Rows", len(df))
+            with col3:
+                st.metric("Columns", len(selected_cols) if selected_cols else len(df.columns))
+            with col4:
+                st.metric("Active Filters", len(active_filters))
+
+            # Quick statistics for numeric columns
+            numeric_display_cols = [col for col in display_df.columns if col in analytics.numeric_cols]
+            if numeric_display_cols:
+                st.markdown("### Quick Statistics")
+                st.dataframe(display_df[numeric_display_cols].describe(), use_container_width=True)
+
+        except Exception as e:
+            st.error(f"Error displaying data: {str(e)}")
+
+
+def render_agent_management():
+    """Render agent management interface"""
+    st.subheader("⚙️ Agent Management System")
+    
+    analytics = st.session_state.analytics
+    
+    if not hasattr(analytics, 'agent_store'):
+        st.warning("🔒 Agent management requires agentic capabilities (OpenAI API key needed)")
+        return
+    
+    # Get agent management data
+    mgmt_data = analytics.get_agent_management_ui()
+    stats = mgmt_data['stats']
+    agents = mgmt_data['agents']
+    staging_agents = mgmt_data['staging_agents']
+    
+    # Statistics overview
+    st.markdown("### 📊 Agent System Statistics")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Agents", stats['total_agents'])
+    with col2:
+        st.metric("High Quality", stats['high_quality'])
+    with col3:
+        st.metric("Staging Queue", stats['staging_agents'])
+    with col4:
+        st.metric("Categories", len(stats['categories']))
+    
+    # Categories overview
+    if stats['categories']:
+        st.markdown("**📋 Available Categories:**")
+        category_text = ", ".join(stats['categories'])
+        st.markdown(f"*{category_text}*")
+    
+    # Production agents
+    st.markdown("---")
+    st.markdown("### 🚀 Production Agents")
+    
+    if agents:
+        for agent in sorted(agents, key=lambda x: x.quality_score, reverse=True):
+            with st.expander(f"🤖 {agent.title} (Quality: {agent.quality_score:.2f})"):
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    st.markdown(f"**Description:** {agent.description}")
+                    st.markdown(f"**Categories:** {', '.join(agent.category_tags)}")
+                    st.markdown(f"**Usage Count:** {agent.usage_count}")
+                    st.markdown(f"**Success Rate:** {agent.success_rate:.1%}")
+                    st.markdown(f"**Trust Level:** {agent.trust_level}")
+                    st.markdown(f"**Created:** {agent.created_at.strftime('%Y-%m-%d %H:%M')}")
+                
+                with col2:
+                    st.markdown("**Actions:**")
+                    if st.button(f"🔍 View Details", key=f"view_{agent.agent_id}"):
+                        st.json(agent.to_dict())
+                    
+                    if st.button(f"🧪 Test Agent", key=f"test_{agent.agent_id}"):
+                        st.info("Agent testing functionality would be implemented here")
+    else:
+        st.info("🔄 No production agents available yet. Upload data and run some analyses to create agents!")
+    
+    # Staging agents (pending approval)
+    if staging_agents:
+        st.markdown("---")
+        st.markdown("### 🔄 Staging Queue (Pending Approval)")
+        
+        for agent in staging_agents:
+            with st.expander(f"⏳ {agent.title} (Pending)"):
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    st.markdown(f"**Description:** {agent.description}")
+                    st.markdown(f"**Categories:** {', '.join(agent.category_tags)}")
+                    st.markdown(f"**Created:** {agent.created_at.strftime('%Y-%m-%d %H:%M')}")
+                    st.markdown(f"**Created By:** {agent.created_by}")
+                
+                with col2:
+                    st.markdown("**Approval Actions:**")
+                    
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        if st.button("✅ Approve", key=f"approve_{agent.agent_id}"):
+                            if analytics.agent_store.promote_agent(agent.agent_id):
+                                st.success("Agent promoted to production!")
+                                st.rerun()
+                            else:
+                                st.error("Failed to promote agent")
+                    
+                    with col_b:
+                        if st.button("❌ Reject", key=f"reject_{agent.agent_id}"):
+                            if agent.agent_id in analytics.agent_store.staging_agents:
+                                del analytics.agent_store.staging_agents[agent.agent_id]
+                                st.success("Agent rejected and removed")
+                                st.rerun()
+    
+    # Agent creation tools
+    st.markdown("---")
+    st.markdown("### 🛠️ Agent Development Tools")
+    
+    tab1, tab2 = st.tabs(["📝 Manual Agent Creation", "💾 Train from Code"])
+    
+    with tab1:
+        st.markdown("**Manual Agent Creation** (For advanced users)")
+        
+        title = st.text_input("Agent Title")
+        description = st.text_area("Agent Description")
+        categories = st.text_input("Categories (comma-separated)")
+        prompt_template = st.text_area("Prompt Template", height=150)
+        
+        if st.button("Create Agent", type="primary"):
+            if title and description and prompt_template:
+                new_agent = AgentArtifact(
+                    title=title,
+                    description=description,
+                    category_tags=[cat.strip() for cat in categories.split(',') if cat.strip()],
+                    prompt_template=prompt_template,
+                    created_by="manual",
+                    trust_level="medium"
+                )
+                analytics.agent_store.add_agent(new_agent, staging=True)
+                st.success("Custom agent created and added to staging queue!")
+                st.rerun()
+            else:
+                st.error("Please fill in all required fields")
+    
+    with tab2:
+        st.markdown("**🎯 Train Bot from Custom Code**")
+        st.markdown("Provide your visualization code and the bot will learn to reuse it for similar requests.")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("#### 🎯 Quick Analysis")
-            analysis_type = st.selectbox("Choose Analysis Type:", [
-                "Distribution Analysis",
-                "Correlation Matrix",
-                "Statistical Summary",
-                "Outlier Detection",
-                "Category Breakdown"
-            ])
+            train_title = st.text_input("Visualization Name", placeholder="e.g., Customer Segmentation Sunburst")
+            train_description = st.text_area("What does this visualization show?", 
+                                           placeholder="e.g., Shows customer segments broken down by product categories with revenue")
+            train_categories = st.text_input("Analysis Categories", 
+                                           placeholder="e.g., segmentation, customer, visualization")
             
-            if analysis_type == "Distribution Analysis":
-                numeric_cols = st.session_state.df.select_dtypes(include=[np.number]).columns.tolist()
-                if numeric_cols:
-                    selected_col = st.selectbox("Select Column:", numeric_cols)
-                    if st.button("📊 Generate Analysis"):
-                        fig = px.histogram(st.session_state.df, x=selected_col, 
-                                         title=f"Distribution of {selected_col}",
-                                         marginal="box")
-                        fig.update_layout(height=500)
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Statistics
-                        stats = st.session_state.df[selected_col].describe()
-                        st.write("📈 Statistical Summary:")
-                        st.dataframe(stats.to_frame().T)
-            
-            elif analysis_type == "Correlation Matrix":
-                numeric_cols = st.session_state.df.select_dtypes(include=[np.number]).columns.tolist()
-                if len(numeric_cols) > 1:
-                    if st.button("🔗 Generate Correlation Matrix"):
-                        corr_matrix = st.session_state.df[numeric_cols].corr()
-                        fig = px.imshow(corr_matrix, 
-                                      title="Correlation Matrix",
-                                      color_continuous_scale='RdBu',
-                                      aspect='auto')
-                        fig.update_layout(height=600)
-                        st.plotly_chart(fig, use_container_width=True)
+            # Context for when to use this visualization
+            use_cases = st.text_area("When should this be used?", 
+                                   placeholder="e.g., When analyzing customer segments, comparing groups, showing hierarchical data")
         
         with col2:
-            st.markdown("#### 🔧 Custom Visualization")
+            train_code = st.text_area("Visualization Code", height=200, placeholder="""
+# Example:
+import plotly.express as px
+fig = px.sunburst(df, path=['{segment}', '{category}'], 
+                  values='{revenue}', title='Revenue by Segment')
+
+# Use {column_name} for dynamic column names
+# Use {title} for dynamic titles
+""")
             
-            viz_type = st.selectbox("Visualization Type:", [
-                "Scatter Plot",
-                "Bar Chart",
-                "Box Plot",
-                "Line Chart",
-                "Pie Chart"
-            ])
-            
-            all_cols = st.session_state.df.columns.tolist()
-            
-            if viz_type == "Scatter Plot":
-                x_col = st.selectbox("X-axis:", all_cols, key="scatter_x")
-                y_col = st.selectbox("Y-axis:", all_cols, key="scatter_y")
-                color_col = st.selectbox("Color by (optional):", [None] + all_cols, key="scatter_color")
-                
-                if st.button("📊 Create Scatter Plot"):
-                    fig = px.scatter(st.session_state.df, x=x_col, y=y_col, color=color_col,
-                                   title=f"{x_col} vs {y_col}")
-                    st.plotly_chart(fig, use_container_width=True)
-            
-            elif viz_type == "Bar Chart":
-                cat_col = st.selectbox("Category:", all_cols, key="bar_cat")
-                num_col = st.selectbox("Value:", all_cols, key="bar_num")
-                
-                if st.button("📊 Create Bar Chart"):
-                    if st.session_state.df[cat_col].dtype == 'object':
-                        grouped = st.session_state.df.groupby(cat_col)[num_col].mean().reset_index()
-                        fig = px.bar(grouped, x=cat_col, y=num_col,
-                                   title=f"Average {num_col} by {cat_col}")
-                        st.plotly_chart(fig, use_container_width=True)
+            # Test the code option
+            if st.button("🧪 Test Code"):
+                if train_code:
+                    st.code(train_code, language="python")
+                    st.info("Code syntax appears valid. Consider testing in a notebook first.")
         
-        # Data export
-        st.markdown("### 💾 Export Options")
-        col1, col2, col3 = st.columns(3)
+        # Create agent from code
+        if st.button("💾 Train Bot with This Code", type="primary"):
+            if train_title and train_description and train_code:
+                # Create agent with code template
+                new_agent = AgentArtifact(
+                    title=train_title,
+                    description=train_description,
+                    category_tags=[cat.strip() for cat in train_categories.split(',') if cat.strip()] or ['visualization'],
+                    prompt_template=f"Create visualization: {train_description}. Use case: {use_cases}",
+                    code_template=train_code,
+                    examples=[{
+                        'input': f"Create a {train_title.lower()}",
+                        'output': f"Generated {train_title} visualization",
+                        'code': train_code
+                    }],
+                    created_by="code_training",
+                    trust_level="medium",
+                    quality_score=0.7
+                )
+                analytics.agent_store.add_agent(new_agent, staging=True)
+                st.success(f"🎉 Bot trained with '{train_title}'! It will now suggest this visualization for similar requests.")
+                st.info("The new agent is in the staging queue. Approve it above to make it active.")
+                st.rerun()
+            else:
+                st.error("Please provide title, description, and code to train the bot.")
+
+    # System maintenance
+    with st.expander("🔧 System Maintenance"):
+        st.markdown("**Agent System Maintenance**")
+        
+        col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("📥 Download CSV"):
-                csv = st.session_state.df.to_csv(index=False)
-                st.download_button(
-                    label="📁 Download Data",
-                    data=csv,
-                    file_name="nfl_analytics_data.csv",
-                    mime="text/csv"
-                )
+            if st.button("🔄 Refresh Agent Stats"):
+                st.rerun()
         
         with col2:
-            if st.button("📊 Export Summary"):
-                summary = st.session_state.df.describe().to_csv()
+            if st.button("📊 Export Agent Data"):
+                agent_data = {
+                    'production_agents': [agent.to_dict() for agent in agents],
+                    'staging_agents': [agent.to_dict() for agent in staging_agents],
+                    'stats': stats
+                }
                 st.download_button(
-                    label="📈 Download Summary",
-                    data=summary,
-                    file_name="data_summary.csv",
-                    mime="text/csv"
+                    label="📥 Download Agent Data (JSON)",
+                    data=json.dumps(agent_data, indent=2, default=str),
+                    file_name="agent_system_export.json",
+                    mime="application/json"
                 )
 
-else:
-    # Welcome screen
-    st.markdown("""
-    <div style="text-align: center; padding: 2rem;">
-        <h2>🏈 Welcome to the Intelligent NFL Analytics Copilot!</h2>
-        <p style="font-size: 1.2rem; color: #666;">
-            Load your data to get started with AI-powered analytics
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown("""
-        ### ✨ Features:
-        - **🤖 Smart AI Assistant**: Ask questions in natural language
-        - **📊 Intelligent Dashboards**: Auto-generated insights and visualizations
-        - **🎯 Custom Analysis**: Build your own charts and analysis
-        - **📈 Data Stories**: Automatic narrative insights from your data
-        - **🔍 Pattern Detection**: Find hidden relationships and trends
-        
-        ### 🚀 Getting Started:
-        1. **Load Data**: Upload a CSV file or use our demo data
-        2. **Explore Dashboard**: View auto-generated insights and visualizations  
-        3. **Chat with AI**: Ask questions about your data in plain English
-        4. **Custom Analysis**: Create your own visualizations and reports
-        """)
 
-# Footer
-st.markdown("---")
-st.markdown(
-    "<div style='text-align: center; color: #666; padding: 1rem;'>"
-    "🏈 Intelligent NFL Analytics Copilot | Powered by AI & Advanced Analytics"
-    "</div>", 
-    unsafe_allow_html=True
-)
+if __name__ == "__main__":
+    main()
