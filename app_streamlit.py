@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 1
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -2851,4 +2851,5 @@ fig = px.sunburst(df, path=['{segment}', '{category}'],
 
 
 if __name__ == "__main__":
+
     main()
