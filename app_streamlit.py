@@ -27,7 +27,7 @@ except ImportError:
     st.error("⚠️ Groq library not installed. Run: pip install groq")
 
 # Internal Groq API Key
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "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"
 
 # Set page config
 st.set_page_config(
