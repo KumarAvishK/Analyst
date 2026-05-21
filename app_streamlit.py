@@ -113,10 +113,8 @@ html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif !important;
     background-color: #ffffff !important;
 }
-/* Explicit text color only on block-level text elements, NOT on interactive widgets */
-p, span, div.stMarkdown, label, h1, h2, h3, h4, h5, h6 {
-    color: #1a2333;
-}
+/* Explicit text color only on block-level containers, NOT bare p/span which bleeds into buttons */
+div.stMarkdown, div.stText { color: #1a2333; }
 
 .block-container { padding-top: 4.5rem !important; max-width: 1200px; }
 
@@ -280,21 +278,28 @@ footer { visibility: hidden; }
     font-weight: 700;
 }
 
-/* Buttons — global, high specificity, white text always */
+/* Buttons — nuclear specificity, covers all Streamlit button variants */
+button,
 .stButton > button,
-button[data-testid="baseButton-secondary"],
-button[data-testid="baseButton-primary"],
-[data-testid="stSidebar"] .stButton > button {
-    background: #0a2540 !important;
+.stButton > button *,
+[data-testid*="Button"],
+[data-testid*="Button"] *,
+[data-testid*="button"],
+[data-testid*="button"] *,
+div[data-testid="stSidebar"] button,
+div[data-testid="stSidebar"] button *,
+div[data-testid="stSidebar"] button p,
+div[data-testid="stSidebar"] button span {
+    background-color: #0a2540 !important;
     color: #ffffff !important;
     border-radius: 8px !important;
     border: none !important;
     font-weight: 600 !important;
-    padding: 0.5rem 1.1rem !important;
 }
+button:hover,
 .stButton > button:hover,
-[data-testid="stSidebar"] .stButton > button:hover {
-    background: #14304f !important;
+.stButton > button:hover * {
+    background-color: #14304f !important;
     color: #e6c878 !important;
 }
 
@@ -1368,6 +1373,21 @@ def initialize_analytics(df: pd.DataFrame, model: str):
 
 def main():
     render_header()
+
+    # Late-injected button fix — this runs after Streamlit's own CSS so it wins
+    st.markdown(
+        """
+        <style>
+        button { color: #ffffff !important; }
+        button p, button span, button div { color: #ffffff !important; }
+        .stButton > button { background-color: #0a2540 !important; color: #ffffff !important; }
+        .stButton > button p,
+        .stButton > button span { color: #ffffff !important; }
+        .stFileUploader button { background-color: #0a2540 !important; color: #ffffff !important; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if "analytics" not in st.session_state:
         st.session_state.analytics = None
