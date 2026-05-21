@@ -165,47 +165,48 @@ html, body, [class*="css"] {
 .kx-hero .kx-hero-accent { color: var(--kite-gold); font-weight: 700; }
 
 .kx-card {
-    background: var(--kite-surface);
+    background: #ffffff !important;
     border: 1px solid var(--kite-border);
     border-radius: 12px;
     padding: 1.25rem 1.4rem;
     margin: 0.6rem 0;
     box-shadow: 0 1px 3px rgba(10, 37, 64, 0.04);
+    color: #1a2333 !important;
 }
 .kx-card-title {
     font-size: 0.78rem;
     text-transform: uppercase;
     letter-spacing: 0.8px;
-    color: var(--kite-text-soft);
+    color: #4a5568 !important;
     font-weight: 600;
     margin-bottom: 0.4rem;
 }
 .kx-card-value {
     font-size: 1.65rem;
     font-weight: 700;
-    color: var(--kite-navy);
+    color: #0a2540 !important;
     line-height: 1.2;
 }
 .kx-card-sub {
     font-size: 0.85rem;
-    color: var(--kite-text-soft);
+    color: #4a5568 !important;
     margin-top: 0.25rem;
 }
 
 .kx-callout {
     border-left: 4px solid var(--kite-gold);
-    background: var(--kite-surface-soft);
+    background: #f7f8fb !important;
     padding: 1rem 1.25rem;
     border-radius: 0 8px 8px 0;
     margin: 1rem 0;
-    color: var(--kite-text);
+    color: #1a2333 !important;
 }
 
 .kx-takeaway {
     display: flex;
     gap: 0.9rem;
     align-items: flex-start;
-    background: #fdfcf6;
+    background: #fdfcf6 !important;
     border: 1px solid #efe3c1;
     border-radius: 10px;
     padding: 0.9rem 1.1rem;
@@ -216,26 +217,27 @@ html, body, [class*="css"] {
     width: 30px; height: 30px;
     border-radius: 50%;
     background: var(--kite-gold);
-    color: #2a1b00;
+    color: #2a1b00 !important;
     font-weight: 700;
     display: flex; align-items: center; justify-content: center;
 }
-.kx-takeaway-body { color: var(--kite-text); font-size: 0.96rem; line-height: 1.45; }
+.kx-takeaway-body { color: #1a2333 !important; font-size: 0.96rem; line-height: 1.45; }
 
 .kx-ai-response {
-    background: var(--kite-surface-soft);
-    border-left: 4px solid var(--kite-navy);
+    background: #f7f8fb !important;
+    border-left: 4px solid #0a2540;
     padding: 1.25rem 1.5rem;
+    color: #1a2333 !important;
     border-radius: 0 10px 10px 0;
     margin: 1rem 0;
     line-height: 1.55;
 }
 
 /* Quality status panels */
-.kx-q-excellent { background: #ecfdf3; border: 1px solid #abefc6; padding: 1rem 1.2rem; border-radius: 10px; }
-.kx-q-good      { background: #f0f9ff; border: 1px solid #bae0fd; padding: 1rem 1.2rem; border-radius: 10px; }
-.kx-q-warning   { background: #fffaeb; border: 1px solid #fcd980; padding: 1rem 1.2rem; border-radius: 10px; }
-.kx-q-poor      { background: #fef2f2; border: 1px solid #fda4a4; padding: 1rem 1.2rem; border-radius: 10px; }
+.kx-q-excellent { background: #ecfdf3 !important; border: 1px solid #abefc6; padding: 1rem 1.2rem; border-radius: 10px; color: #14532d !important; }
+.kx-q-good      { background: #f0f9ff !important; border: 1px solid #bae0fd; padding: 1rem 1.2rem; border-radius: 10px; color: #0c4a6e !important; }
+.kx-q-warning   { background: #fffaeb !important; border: 1px solid #fcd980; padding: 1rem 1.2rem; border-radius: 10px; color: #78350f !important; }
+.kx-q-poor      { background: #fef2f2 !important; border: 1px solid #fda4a4; padding: 1rem 1.2rem; border-radius: 10px; color: #7f1d1d !important; }
 
 /* Tabs */
 .stTabs [data-baseweb="tab-list"] {
@@ -266,6 +268,13 @@ html, body, [class*="css"] {
 .stButton > button:hover {
     background: var(--kite-navy-2);
     color: var(--kite-gold);
+}
+
+/* Compact dashboard visuals row */
+.kx-dash-row { display: flex; gap: 0.75rem; margin: 0.5rem 0; }
+.kx-dash-panel {
+    flex: 1; background: #ffffff !important; border: 1px solid #e3e6ee;
+    border-radius: 10px; padding: 0.5rem; min-width: 0;
 }
 
 /* Sidebar */
@@ -301,8 +310,11 @@ def kx_apply_theme(fig: go.Figure) -> go.Figure:
 # GROQ WRAPPER
 # ============================================================
 
+FIXED_MODEL = "llama-3.1-8b-instant"
+
+
 class GroqLLM:
-    def __init__(self, api_key: str, model: str = "llama-3.1-70b-versatile"):
+    def __init__(self, api_key: str, model: str = FIXED_MODEL):
         self.client = Groq(api_key=api_key)
         self.model = model
 
@@ -499,31 +511,60 @@ class UniversalAnalytics:
         """Generate the storyboard narrative for the Executive Dashboard."""
         if not self.llm:
             return self._fallback_summary()
+
+        # Build a richer context including top value counts for categoricals
+        cat_context = ""
+        for c in self.categorical_cols[:3]:
+            vc = self.df[c].value_counts().head(5)
+            cat_context += f"\n  {c}: {', '.join(f'{k}={v}' for k, v in vc.items())}"
+
+        num_context = ""
+        for c in self.numeric_cols[:5]:
+            s = self.df[c].dropna()
+            num_context += f"\n  {c}: mean={s.mean():.2f}, median={s.median():.2f}, max={s.max():.2f}, min={s.min():.2f}"
+
+        monetary_ctx = ""
+        if "monetary" in self.insights:
+            m = self.insights["monetary"]
+            monetary_ctx = f"\n  Total monetary value: ${m['total']:,.0f}, avg per record: ${m['avg']:,.2f}"
+
         prompt = (
-            f"DATASET CONTEXT\n{self._data_brief()}\n\n"
-            "Write a 3-paragraph executive narrative for a non-technical business leader. "
-            "Structure:\n"
-            "  Paragraph 1 - WHAT THIS DATA IS: in one sentence, what business activity does it describe?\n"
-            "  Paragraph 2 - WHAT JUMPS OUT: the 2-3 most important patterns or anomalies, with specific numbers.\n"
-            "  Paragraph 3 - WHY IT MATTERS: the single biggest business implication.\n\n"
-            "Tone: senior consultant briefing a CEO. No jargon. No filler. No bullet points - prose."
+            f"DATASET CONTEXT\n{self._data_brief()}"
+            f"\nTop categorical breakdowns:{cat_context}"
+            f"\nNumeric profile:{num_context}"
+            f"{monetary_ctx}\n\n"
+            "Write a sharp 3-sentence executive narrative. Rules:\n"
+            "  Sentence 1 — BUSINESS DOMAIN: Name the specific business function this data covers "
+            "(e.g. 'retail sales', 'HR workforce', 'logistics') and the time scope if visible. "
+            "Be specific — not just 'this dataset contains records'.\n"
+            "  Sentence 2 — KEY BUSINESS SIGNAL: State the single most important pattern, trend, or "
+            "anomaly using actual numbers from the data. Focus on commercial or operational impact.\n"
+            "  Sentence 3 — DECISION IMPLICATION: What should a business leader do or watch because of this? "
+            "One clear, actionable implication.\n\n"
+            "Tone: senior consultant briefing a CEO. Specific numbers, zero filler, no bullet points — "
+            "three sentences of clean prose."
         )
-        return self.llm.predict(prompt, max_tokens=1200)
+        return self.llm.predict(prompt, max_tokens=600)
 
     def ai_top_takeaways(self) -> list:
         if not self.llm:
             return self._fallback_takeaways()
         prompt = (
             f"DATASET CONTEXT\n{self._data_brief()}\n\n"
-            "Return exactly 3 takeaways for a CEO reading this data. Each takeaway is:\n"
-            "  - ONE sentence\n"
-            "  - Must reference a specific number from the data\n"
-            "  - Must include a clear recommended action\n\n"
-            "Format your response as a numbered list (1. 2. 3.) - nothing else, no preamble."
+            "Return exactly 3 crisp takeaways for a CEO. Format rules:\n"
+            "  - Each takeaway is a SINGLE sentence under 20 words\n"
+            "  - Must cite ONE specific number from the data\n"
+            "  - Must end with a clear recommended action verb (e.g. 'Prioritise', 'Investigate', 'Scale', 'Cut')\n"
+            "  - No preamble, no explanation — just the 3 numbered lines\n\n"
+            "Example format:\n"
+            "1. Electronics drives 42% of revenue — double the marketing budget there.\n"
+            "2. 18% of orders breach the 10-day SLA — audit the last-mile carrier.\n"
+            "3. Premium customers spend 3× more — build a dedicated retention programme.\n\n"
+            "Now write 3 takeaways for this data:"
         )
-        out = self.llm.predict(prompt, max_tokens=600)
+        out = self.llm.predict(prompt, max_tokens=400)
         lines = [re.sub(r"^\s*\d+[\.\)]\s*", "", ln).strip() for ln in out.split("\n") if ln.strip()]
-        lines = [ln for ln in lines if len(ln) > 15]
+        lines = [ln for ln in lines if len(ln) > 10]
         return lines[:3] if lines else self._fallback_takeaways()
 
     def _fallback_summary(self) -> str:
@@ -795,11 +836,12 @@ def render_dashboard():
     st.markdown(
         f"""
         <div class="kx-hero">
-            <h2>Your Data Story</h2>
-            <p>This view answers: <em>"what does this dataset actually say?"</em> — in business terms.
-            We are looking at <span class="kx-hero-accent">{record_str}</span> records across
-            <span class="kx-hero-accent">{col_str}</span> columns, with overall completeness of
-            <span class="kx-hero-accent">{quality_pct:.1f}%</span>.{monetary_line}</p>
+            <h2>Business Story</h2>
+            <p>KiteIQX has analysed <span class="kx-hero-accent">{record_str}</span> records across
+            <span class="kx-hero-accent">{col_str}</span> dimensions
+            ({ins['column_types']['numeric']} numeric · {ins['column_types']['categorical']} categorical · {ins['column_types']['datetime']} time-based)
+            with <span class="kx-hero-accent">{quality_pct:.1f}%</span> completeness.{monetary_line}
+            The AI narrative and takeaways below reflect what the numbers actually say about your business.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -830,24 +872,36 @@ def render_dashboard():
         <div class="kx-card-value">{quality_pct:.1f}%</div>
         <div class="kx-card-sub">Higher is better; details in Data Quality tab</div></div>""", unsafe_allow_html=True)
 
-    # --- NARRATIVE: FUNCTIONAL SUMMARY ---
+    # --- NARRATIVE: DATA STORY ---
     st.markdown(" ")
-    st.markdown('<div class="kx-card"><div class="kx-card-title">Functional summary</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
+        'color:#4a5568;font-weight:600;margin-bottom:0.25rem;">Business narrative</div>',
+        unsafe_allow_html=True,
+    )
 
     if "exec_summary" not in st.session_state:
-        with st.spinner("KiteIQX is reading the data..."):
+        with st.spinner("KiteIQX is reading the business context..."):
             st.session_state.exec_summary = a.ai_executive_summary()
-    st.markdown(f'<div class="kx-callout">{st.session_state.exec_summary}</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="kx-callout" style="font-size:1.02rem;line-height:1.65;">'
+        f'{st.session_state.exec_summary}</div>',
+        unsafe_allow_html=True,
+    )
 
     refresh_col, _ = st.columns([1, 5])
-    if refresh_col.button("Regenerate narrative", key="regen_summary"):
+    if refresh_col.button("↻ Regenerate", key="regen_summary"):
         st.session_state.pop("exec_summary", None)
         st.session_state.pop("takeaways", None)
         st.rerun()
 
     # --- TOP 3 TAKEAWAYS ---
     st.markdown(" ")
-    st.markdown('<div class="kx-card"><div class="kx-card-title">Top 3 takeaways</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
+        'color:#4a5568;font-weight:600;margin-bottom:0.35rem;">3 decisions this data supports</div>',
+        unsafe_allow_html=True,
+    )
     if "takeaways" not in st.session_state:
         with st.spinner("Identifying the headline insights..."):
             st.session_state.takeaways = a.ai_top_takeaways()
@@ -856,39 +910,102 @@ def render_dashboard():
             f"""<div class="kx-takeaway"><div class="kx-takeaway-num">{i}</div>
             <div class="kx-takeaway-body">{t}</div></div>""", unsafe_allow_html=True)
 
-    # --- SUPPORTING VISUALS ---
+    # --- SUPPORTING VISUALS DASHBOARD ---
     st.markdown(" ")
-    st.markdown('<div class="kx-card"><div class="kx-card-title">Visuals supporting the story</div></div>', unsafe_allow_html=True)
-    left, right = st.columns(2)
+    st.markdown(
+        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
+        'color:#4a5568;font-weight:600;margin-bottom:0.5rem;">Supporting visuals</div>',
+        unsafe_allow_html=True,
+    )
 
-    # 1. Top categorical breakdown
-    with left:
+    COMPACT = dict(
+        plot_bgcolor="#ffffff",
+        paper_bgcolor="#ffffff",
+        font=dict(family="Inter, system-ui, sans-serif", color="#1a2333", size=11),
+        colorway=["#0a2540", "#c79a3a", "#14304f", "#e6c878", "#4a5568"],
+        margin=dict(t=36, l=28, r=12, b=28),
+        height=220,
+        showlegend=False,
+    )
+
+    vis_cols = st.columns(3)
+
+    # Panel 1 — top categorical bar
+    with vis_cols[0]:
         if a.categorical_cols:
             cat = a.categorical_cols[0]
-            top = a.df[cat].value_counts().head(8).reset_index()
+            top = a.df[cat].value_counts().head(6).reset_index()
             top.columns = [cat, "count"]
-            fig = px.bar(top, x=cat, y="count", title=f"Composition: {cat}")
-            fig.update_traces(marker_color="#0a2540")
-            st.plotly_chart(kx_apply_theme(fig), use_container_width=True)
+            fig1 = px.bar(top, x=cat, y="count", title=f"{cat} breakdown")
+            fig1.update_traces(marker_color="#0a2540")
+            fig1.update_layout(**COMPACT)
+            fig1.update_xaxes(tickangle=-30, tickfont_size=10)
+            st.plotly_chart(fig1, use_container_width=True)
         elif a.numeric_cols:
             c = a.numeric_cols[0]
-            fig = px.histogram(a.df, x=c, nbins=30, title=f"Distribution: {c}")
-            fig.update_traces(marker_color="#0a2540")
-            st.plotly_chart(kx_apply_theme(fig), use_container_width=True)
+            fig1 = px.histogram(a.df, x=c, nbins=20, title=f"{c} distribution")
+            fig1.update_traces(marker_color="#0a2540")
+            fig1.update_layout(**COMPACT)
+            st.plotly_chart(fig1, use_container_width=True)
 
-    # 2. Time trend OR top numeric distribution
-    with right:
+    # Panel 2 — time trend or scatter
+    with vis_cols[1]:
         if a.datetime_cols and a.numeric_cols:
-            d, v = a.datetime_cols[0], (a.money_cols[0] if a.money_cols else a.numeric_cols[0])
-            ts = a.df[[d, v]].dropna().sort_values(d)
-            fig = px.line(ts, x=d, y=v, title=f"{v} over time")
-            fig.update_traces(line_color="#c79a3a")
-            st.plotly_chart(kx_apply_theme(fig), use_container_width=True)
+            dc = a.datetime_cols[0]
+            vc = a.money_cols[0] if a.money_cols else a.numeric_cols[0]
+            ts = a.df[[dc, vc]].dropna().sort_values(dc)
+            fig2 = px.line(ts, x=dc, y=vc, title=f"{vc} over time")
+            fig2.update_traces(line_color="#c79a3a", line_width=2)
+            fig2.update_layout(**COMPACT)
+            st.plotly_chart(fig2, use_container_width=True)
         elif len(a.numeric_cols) >= 2:
-            x, y = a.numeric_cols[:2]
-            fig = px.scatter(a.df, x=x, y=y, title=f"{y} vs {x}")
-            fig.update_traces(marker=dict(color="#0a2540", opacity=0.55))
-            st.plotly_chart(kx_apply_theme(fig), use_container_width=True)
+            x2, y2 = a.numeric_cols[0], a.numeric_cols[1]
+            fig2 = px.scatter(a.df, x=x2, y=y2, title=f"{y2} vs {x2}")
+            fig2.update_traces(marker=dict(color="#0a2540", opacity=0.5, size=5))
+            fig2.update_layout(**COMPACT)
+            st.plotly_chart(fig2, use_container_width=True)
+
+    # Panel 3 — second categorical breakdown or numeric distribution
+    with vis_cols[2]:
+        if len(a.categorical_cols) >= 2:
+            cat2 = a.categorical_cols[1]
+            top2 = a.df[cat2].value_counts().head(6).reset_index()
+            top2.columns = [cat2, "count"]
+            fig3 = px.bar(top2, x=cat2, y="count", title=f"{cat2} split",
+                          color="count", color_continuous_scale=["#e6c878", "#0a2540"])
+            fig3.update_layout(**COMPACT)
+            fig3.update_coloraxes(showscale=False)
+            fig3.update_xaxes(tickangle=-30, tickfont_size=10)
+            st.plotly_chart(fig3, use_container_width=True)
+        elif len(a.numeric_cols) >= 2:
+            c3 = a.numeric_cols[1] if len(a.numeric_cols) > 1 else a.numeric_cols[0]
+            fig3 = px.histogram(a.df, x=c3, nbins=20, title=f"{c3} distribution")
+            fig3.update_traces(marker_color="#c79a3a")
+            fig3.update_layout(**COMPACT)
+            st.plotly_chart(fig3, use_container_width=True)
+
+    # Row 2 — numeric heatmap or box-plots if data allows
+    if len(a.numeric_cols) >= 3 and len(a.categorical_cols) >= 1:
+        vis_cols2 = st.columns(2)
+        with vis_cols2[0]:
+            box_col = a.money_cols[0] if a.money_cols else a.numeric_cols[0]
+            cat_box = a.categorical_cols[0]
+            fig4 = px.box(
+                a.df, x=cat_box, y=box_col, title=f"{box_col} by {cat_box}",
+                color_discrete_sequence=["#0a2540"],
+            )
+            fig4.update_layout(**COMPACT)
+            st.plotly_chart(fig4, use_container_width=True)
+        with vis_cols2[1]:
+            corr_cols = a.numeric_cols[:5]
+            corr_m = a.df[corr_cols].corr()
+            fig5 = px.imshow(
+                corr_m, text_auto=".1f", aspect="auto",
+                color_continuous_scale=["#b91c1c", "#ffffff", "#0a2540"],
+                title="Correlation heat",
+            )
+            fig5.update_layout(**{**COMPACT, "height": 220})
+            st.plotly_chart(fig5, use_container_width=True)
 
     # --- WHAT TO DO NEXT ---
     st.markdown(
@@ -1222,8 +1339,7 @@ def main():
         else:
             st.success("AI engine ready.")
 
-        model = st.selectbox("AI model", ["llama-3.1-70b-versatile", "llama-3.1-8b-instant",
-                                          "mixtral-8x7b-32768", "gemma2-9b-it"])
+        model = FIXED_MODEL
 
         st.markdown("---")
         st.markdown("### Load data")
