@@ -111,8 +111,11 @@ st.markdown(
 /* Base */
 html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif !important;
-    color: #1a2333 !important;
     background-color: #ffffff !important;
+}
+/* Explicit text color only on block-level text elements, NOT on interactive widgets */
+p, span, div.stMarkdown, label, h1, h2, h3, h4, h5, h6 {
+    color: #1a2333;
 }
 
 .block-container { padding-top: 4.5rem !important; max-width: 1200px; }
@@ -277,18 +280,22 @@ footer { visibility: hidden; }
     font-weight: 700;
 }
 
-/* Buttons */
-.stButton > button {
-    background: var(--kite-navy);
-    color: #ffffff;
-    border-radius: 8px;
-    border: none;
-    font-weight: 600;
-    padding: 0.5rem 1.1rem;
+/* Buttons — global, high specificity, white text always */
+.stButton > button,
+button[data-testid="baseButton-secondary"],
+button[data-testid="baseButton-primary"],
+[data-testid="stSidebar"] .stButton > button {
+    background: #0a2540 !important;
+    color: #ffffff !important;
+    border-radius: 8px !important;
+    border: none !important;
+    font-weight: 600 !important;
+    padding: 0.5rem 1.1rem !important;
 }
-.stButton > button:hover {
-    background: var(--kite-navy-2);
-    color: var(--kite-gold);
+.stButton > button:hover,
+[data-testid="stSidebar"] .stButton > button:hover {
+    background: #14304f !important;
+    color: #e6c878 !important;
 }
 
 /* Compact dashboard visuals row */
@@ -312,15 +319,6 @@ section[data-testid="stSidebar"] p,
 section[data-testid="stSidebar"] span:not([class*="st-"]),
 section[data-testid="stSidebar"] .stMarkdown {
     color: #1a2333 !important;
-}
-/* Buttons in sidebar — keep white text on navy */
-section[data-testid="stSidebar"] .stButton > button {
-    background: #0a2540 !important;
-    color: #ffffff !important;
-}
-section[data-testid="stSidebar"] .stButton > button:hover {
-    background: #14304f !important;
-    color: #e6c878 !important;
 }
 /* Selectbox / dropdown text must be readable */
 section[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] * {
