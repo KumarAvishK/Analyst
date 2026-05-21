@@ -50,7 +50,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 st.set_page_config(
     page_title="KiteIQX Intelligence",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",
     page_icon="◆",
 )
 
@@ -99,10 +99,20 @@ st.markdown(
     --kite-danger:  #b91c1c;
 }
 
+/* Force light mode globally — prevents phone dark-mode from inverting colours */
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"],
+.main, section.main {
+    background-color: #ffffff !important;
+    color: #1a2333 !important;
+}
+
 /* Base */
 html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif !important;
-    color: var(--kite-text);
+    color: #1a2333 !important;
+    background-color: #ffffff !important;
 }
 
 .block-container { padding-top: 0.75rem !important; }
@@ -136,15 +146,15 @@ footer { visibility: hidden; }
 }
 .kx-wordmark {
     font-size: 1.6rem; font-weight: 700;
-    color: var(--kite-navy);
+    color: #0a2540 !important;
     letter-spacing: -0.3px;
 }
-.kx-wordmark span { color: var(--kite-gold); }
+.kx-wordmark span { color: #c79a3a !important; }
 .kx-tag {
-    color: var(--kite-text-soft);
+    color: #4a5568 !important;
     font-size: 0.95rem;
     margin-bottom: 1.25rem;
-    border-bottom: 1px solid var(--kite-border);
+    border-bottom: 1px solid #e3e6ee;
     padding-bottom: 1rem;
 }
 
@@ -290,11 +300,16 @@ footer { visibility: hidden; }
 
 /* Sidebar */
 section[data-testid="stSidebar"] {
-    background: var(--kite-surface-soft);
-    border-right: 1px solid var(--kite-border);
+    background: #f7f8fb !important;
+    border-right: 1px solid #e3e6ee;
 }
-section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] h3 {
-    color: var(--kite-navy);
+section[data-testid="stSidebar"] * {
+    color: #1a2333 !important;
+}
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3 {
+    color: #0a2540 !important;
 }
 </style>
 """,
