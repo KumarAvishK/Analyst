@@ -32,6 +32,14 @@ from sklearn.metrics import r2_score
 
 warnings.filterwarnings("ignore")
 
+# Google Sheets imports (soft)
+try:
+    import gspread
+    from google.oauth2.service_account import Credentials
+    GSHEETS_AVAILABLE = True
+except ImportError:
+    GSHEETS_AVAILABLE = False
+
 # Groq imports (soft)
 try:
     from groq import Groq
@@ -75,6 +83,86 @@ def _get_groq_key() -> str:
 
 
 GROQ_API_KEY = _get_groq_key()
+
+# ============================================================
+# GOOGLE SHEETS LOGGER
+# ============================================================
+
+SHEET_ID = "1rJYe4MVKDc9srbzrqf1CWIfFLmPn_4qTwSEZ5PCTVT0"
+GSHEETS_SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
+
+@st.cache_resource(show_spinner=False)
+def _get_gsheets_client():
+    """Cached Google Sheets client — one connection for the whole session."""
+    if not GSHEETS_AVAILABLE:
+        return None
+    try:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds = Credentials.from_service_account_info(creds_dict, scopes=GSHEETS_SCOPES)
+        return gspread.authorize(creds)
+    except Exception:
+        return None
+
+
+def _get_session_id() -> str:
+    if "session_id" not in st.session_state:
+        import uuid
+        st.session_state.session_id = str(uuid.uuid4())[:8]
+    return st.session_state.session_id
+
+
+def log_upload(filename: str, df, summary: str = "", takeaways: list = None):
+    """Log a file upload event to the 'uploads' sheet."""
+    try:
+        client = _get_gsheets_client()
+        if not client:
+            return
+        sh = client.open_by_key(SHEET_ID)
+        ws = sh.worksheet("uploads")
+        a = st.session_state.get("analytics")
+        completeness = round(100 - df.isnull().sum().sum() / max(1, df.size) * 100, 1)
+        num_cols = len(df.select_dtypes(include=[np.number]).columns)
+        cat_cols = len(df.select_dtypes(include=["object", "category"]).columns)
+        money_cols = [c for c in df.columns if any(w in c.lower()
+                      for w in ("price","cost","amount","revenue","salary","sales","gmv"))]
+        total_val = round(float(df[money_cols].sum().sum()), 2) if money_cols else ""
+        ws.append_row([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            _get_session_id(),
+            filename,
+            len(df),
+            len(df.columns),
+            num_cols,
+            cat_cols,
+            f"{completeness}%",
+            str(total_val) if total_val != "" else "N/A",
+            summary[:500] if summary else "",
+            " | ".join(takeaways) if takeaways else "",
+        ], value_input_option="USER_ENTERED")
+    except Exception:
+        pass  # never crash the app over logging
+
+
+def log_ai_query(filename: str, question: str, answer: str):
+    """Log an AI question + answer to the 'ai_queries' sheet."""
+    try:
+        client = _get_gsheets_client()
+        if not client:
+            return
+        sh = client.open_by_key(SHEET_ID)
+        ws = sh.worksheet("ai_queries")
+        ws.append_row([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            _get_session_id(),
+            filename,
+            question[:300],
+            answer[:800],
+        ], value_input_option="USER_ENTERED")
+    except Exception:
+        pass
 
 
 # ============================================================
@@ -555,7 +643,11 @@ class UniversalAnalytics:
         if not self.llm:
             return "AI is not configured. Add GROQ_API_KEY to .streamlit/secrets.toml."
         prompt = f"DATASET CONTEXT\n{self._data_brief()}\n\nUSER QUESTION\n{query}\n\nAnswer with specific numbers and concrete recommendations."
-        return self.llm.predict(prompt)
+        answer = self.llm.predict(prompt)
+        # Log question + answer to Google Sheets
+        filename = st.session_state.get("last_saved_path", "unknown")
+        log_ai_query(filename, query, answer)
+        return answer
 
     def ai_executive_summary(self) -> str:
         """Generate the storyboard narrative for the Executive Dashboard."""
@@ -953,6 +1045,17 @@ def render_dashboard():
     if "takeaways" not in st.session_state:
         with st.spinner("Identifying the headline insights..."):
             st.session_state.takeaways = a.ai_top_takeaways()
+
+    # Log summary + takeaways to Google Sheets once per upload session
+    if not st.session_state.get("upload_logged") and st.session_state.get("upload_filename"):
+        log_upload(
+            st.session_state.upload_filename,
+            a.df,
+            summary=st.session_state.get("exec_summary", ""),
+            takeaways=st.session_state.get("takeaways", []),
+        )
+        st.session_state.upload_logged = True
+
     for i, t in enumerate(st.session_state.takeaways, 1):
         st.markdown(
             f"""<div class="kx-takeaway"><div class="kx-takeaway-num">{i}</div>
@@ -1356,7 +1459,7 @@ def render_explorer():
 # MAIN
 # ============================================================
 
-def initialize_analytics(df: pd.DataFrame, model: str):
+def initialize_analytics(df: pd.DataFrame, model: str, filename: str = "unknown"):
     llm = None
     if GROQ_AVAILABLE and GROQ_API_KEY:
         try:
@@ -1365,10 +1468,14 @@ def initialize_analytics(df: pd.DataFrame, model: str):
             st.error(f"Could not initialize Groq: {e}")
     st.session_state.analytics = UniversalAnalytics(df, llm)
     st.session_state.viz_engine = VizEngine(st.session_state.analytics)
+    st.session_state.upload_filename = filename
     # Reset story cache so dashboard re-runs against new data
     st.session_state.pop("exec_summary", None)
     st.session_state.pop("takeaways", None)
     st.session_state.pop("ai_last_response", None)
+    st.session_state.pop("upload_logged", None)
+    # Log basic upload info immediately (summary/takeaways logged later once generated)
+    log_upload(filename, df)
 
 
 def main():
@@ -1422,22 +1529,25 @@ def main():
             if st.button("Load", type="primary"):
                 try:
                     df = None
+                    fname = "unknown"
                     if up:
                         df = load_uploaded_file(up)
+                        fname = up.name
                         st.success(f"Loaded **{up.name}** ({len(df):,} rows).")
                     elif url:
                         r = requests.get(url, timeout=30)
                         df = pd.read_csv(io.StringIO(r.text))
+                        fname = url.split("/")[-1] or "url_import"
                         st.success(f"Loaded from URL ({len(df):,} rows).")
                     if df is not None:
-                        initialize_analytics(df, model)
+                        initialize_analytics(df, model, filename=fname)
                 except Exception as e:
                     st.error(f"Load failed: {e}")
         with c2:
             if st.button("Use demo") and demo:
                 try:
                     df = generate_demo(demo)
-                    initialize_analytics(df, model)
+                    initialize_analytics(df, model, filename=f"demo_{demo.replace(' ','_')}")
                     st.success(f"Loaded demo: {demo}.")
                 except Exception as e:
                     st.error(f"Demo failed: {e}")
