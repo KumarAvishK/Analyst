@@ -303,13 +303,34 @@ section[data-testid="stSidebar"] {
     background: #f7f8fb !important;
     border-right: 1px solid #e3e6ee;
 }
-section[data-testid="stSidebar"] * {
-    color: #1a2333 !important;
-}
+/* Only target text nodes, not interactive widgets */
 section[data-testid="stSidebar"] h1,
 section[data-testid="stSidebar"] h2,
-section[data-testid="stSidebar"] h3 {
-    color: #0a2540 !important;
+section[data-testid="stSidebar"] h3,
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] span:not([class*="st-"]),
+section[data-testid="stSidebar"] .stMarkdown {
+    color: #1a2333 !important;
+}
+/* Buttons in sidebar — keep white text on navy */
+section[data-testid="stSidebar"] .stButton > button {
+    background: #0a2540 !important;
+    color: #ffffff !important;
+}
+section[data-testid="stSidebar"] .stButton > button:hover {
+    background: #14304f !important;
+    color: #e6c878 !important;
+}
+/* Selectbox / dropdown text must be readable */
+section[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] * {
+    color: #1a2333 !important;
+    background-color: #ffffff !important;
+}
+/* Text input */
+section[data-testid="stSidebar"] input {
+    color: #1a2333 !important;
+    background-color: #ffffff !important;
 }
 </style>
 """,
