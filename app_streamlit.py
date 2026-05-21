@@ -105,17 +105,17 @@ html, body, [class*="css"] {
     color: var(--kite-text);
 }
 
-.block-container { padding-top: 0.5rem !important; }
+.block-container { padding-top: 0.75rem !important; }
 
-/* Remove Streamlit's default top dead space */
-header[data-testid="stHeader"] { display: none !important; }
+/* Keep Streamlit header visible on mobile (hamburger menu lives there) */
+/* Only hide the deploy/share button, keep hamburger for mobile sidebar */
+.stDeployButton { display: none !important; }
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
-.stDeployButton { display: none !important; }
 
-/* Ensure brand sits flush at top */
+/* Nudge brand mark down slightly so it clears the top bar */
 .kx-brand {
-    padding-top: 0.75rem;
+    padding-top: 0.25rem;
 }
 
 /* Header / branding */
@@ -562,18 +562,16 @@ class UniversalAnalytics:
             return self._fallback_takeaways()
         prompt = (
             f"DATASET CONTEXT\n{self._data_brief()}\n\n"
-            "Return exactly 3 crisp takeaways for a CEO. Format rules:\n"
-            "  - Each takeaway is a SINGLE sentence under 20 words\n"
-            "  - Must cite ONE specific number from the data\n"
-            "  - Must end with a clear recommended action verb (e.g. 'Prioritise', 'Investigate', 'Scale', 'Cut')\n"
-            "  - No preamble, no explanation — just the 3 numbered lines\n\n"
-            "Example format:\n"
-            "1. Electronics drives 42% of revenue — double the marketing budget there.\n"
-            "2. 18% of orders breach the 10-day SLA — audit the last-mile carrier.\n"
-            "3. Premium customers spend 3× more — build a dedicated retention programme.\n\n"
-            "Now write 3 takeaways for this data:"
+            "Return exactly 3 strategic takeaways for a CEO. Each takeaway must:\n"
+            "  - Be a single, direct sentence\n"
+            "  - Reference a specific number from the data\n"
+            "  - Point toward a concrete growth opportunity, operational fix, or strategic decision — "
+            "not just an observation\n"
+            "  - Start with the finding, end with the recommended next move\n\n"
+            "Think like a McKinsey partner: the goal is to surface what to DO next, not just what the data shows.\n\n"
+            "Format: numbered list (1. 2. 3.) — no preamble, no headings, nothing else."
         )
-        out = self.llm.predict(prompt, max_tokens=400)
+        out = self.llm.predict(prompt, max_tokens=500)
         lines = [re.sub(r"^\s*\d+[\.\)]\s*", "", ln).strip() for ln in out.split("\n") if ln.strip()]
         lines = [ln for ln in lines if len(ln) > 10]
         return lines[:3] if lines else self._fallback_takeaways()
