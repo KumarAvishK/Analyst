@@ -105,7 +105,18 @@ html, body, [class*="css"] {
     color: var(--kite-text);
 }
 
-.block-container { padding-top: 2rem; }
+.block-container { padding-top: 0.5rem !important; }
+
+/* Remove Streamlit's default top dead space */
+header[data-testid="stHeader"] { display: none !important; }
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+.stDeployButton { display: none !important; }
+
+/* Ensure brand sits flush at top */
+.kx-brand {
+    padding-top: 0.75rem;
+}
 
 /* Header / branding */
 .kx-brand {
