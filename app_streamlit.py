@@ -115,7 +115,7 @@ html, body, [class*="css"] {
     background-color: #ffffff !important;
 }
 
-.block-container { padding-top: 0.75rem !important; }
+.block-container { padding-top: 4.5rem !important; max-width: 1200px; }
 
 /* Keep Streamlit header visible on mobile (hamburger menu lives there) */
 /* Only hide the deploy/share button, keep hamburger for mobile sidebar */
@@ -1362,6 +1362,13 @@ def main():
             st.warning("No GROQ_API_KEY configured. AI features will be disabled.")
         else:
             st.success("AI engine ready.")
+        st.markdown(
+            f'<div style="font-size:0.78rem;color:#4a5568;background:#f7f8fb;'
+            f'border:1px solid #e3e6ee;border-radius:6px;padding:0.35rem 0.7rem;'
+            f'margin-top:0.3rem;margin-bottom:0.1rem;">'
+            f'⚡ Model: <strong style="color:#0a2540;">llama-3.1-8b-instant</strong></div>',
+            unsafe_allow_html=True,
+        )
 
         model = FIXED_MODEL
 
