@@ -1415,6 +1415,756 @@ def render_explorer():
 
 
 # ============================================================
+# PRESENTATION MAKER  (python-pptx engine — Streamlit-Cloud safe)
+# ============================================================
+# Pure-Python deck generator. No Node.js, no npm, no subprocess.
+# Only dependency is `python-pptx` (add it to requirements.txt).
+
+import json as _json
+from datetime import datetime as _dt
+from pathlib import Path as _Path
+
+# Soft import so the app still loads with a friendly message if missing
+try:
+    from pptx import Presentation as _Prs
+    from pptx.util import Inches as _In, Pt as _Pt
+    from pptx.dml.color import RGBColor as _RGB
+    from pptx.enum.text import PP_ALIGN as _ALIGN, MSO_ANCHOR as _ANCHOR
+    from pptx.enum.shapes import MSO_SHAPE as _SHAPE
+    from pptx.chart.data import CategoryChartData as _ChartData
+    from pptx.enum.chart import (
+        XL_CHART_TYPE as _CT,
+        XL_LEGEND_POSITION as _LEGPOS,
+        XL_LABEL_POSITION as _LABPOS,
+    )
+    PPTX_PY_AVAILABLE = True
+except ImportError:
+    PPTX_PY_AVAILABLE = False
+
+
+# ── theme & font presets ────────────────────────────────────
+
+PPTX_THEMES = {
+    "KiteIQX Brand": {
+        "primary": "0A2540", "secondary": "14304F", "accent": "C79A3A",
+        "background": "FFFFFF", "surface": "F7F8FB", "text": "1A2333", "text_soft": "4A5568",
+    },
+    "Midnight Executive": {
+        "primary": "1E2761", "secondary": "16213E", "accent": "CADCFC",
+        "background": "FFFFFF", "surface": "F0F4FF", "text": "1E2761", "text_soft": "4A5880",
+    },
+    "Coral Energy": {
+        "primary": "2F3C7E", "secondary": "3D4F9E", "accent": "F96167",
+        "background": "FFFFFF", "surface": "FFF8F8", "text": "1A1A2E", "text_soft": "555577",
+    },
+    "Charcoal Minimal": {
+        "primary": "36454F", "secondary": "263238", "accent": "607D8B",
+        "background": "FFFFFF", "surface": "F5F5F5", "text": "212121", "text_soft": "616161",
+    },
+    "Forest & Moss": {
+        "primary": "2C5F2D", "secondary": "1B4332", "accent": "97BC62",
+        "background": "FFFFFF", "surface": "F0FFF4", "text": "1B4332", "text_soft": "52796F",
+    },
+    "Custom": {
+        "primary": "0A2540", "secondary": "14304F", "accent": "C79A3A",
+        "background": "FFFFFF", "surface": "F7F8FB", "text": "1A2333", "text_soft": "4A5568",
+    },
+}
+
+PPTX_FONTS = {
+    "Georgia + Calibri  (Elegant)":        {"header": "Georgia",      "body": "Calibri"},
+    "Arial Black + Arial  (Bold)":         {"header": "Arial Black",  "body": "Arial"},
+    "Calibri  (Clean Modern)":             {"header": "Calibri",      "body": "Calibri Light"},
+    "Trebuchet + Calibri  (Professional)": {"header": "Trebuchet MS", "body": "Calibri"},
+    "Cambria + Calibri  (Classic)":        {"header": "Cambria",      "body": "Calibri"},
+}
+
+
+# ── low-level drawing helpers ───────────────────────────────
+
+def _hx(h):
+    h = h.lstrip("#")
+    return _RGB(int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+
+
+def _bg(slide, hexcolor):
+    fill = slide.background.fill
+    fill.solid()
+    fill.fore_color.rgb = _hx(hexcolor)
+
+
+def _rect(slide, x, y, w, h, fill=None, line=None, line_w=1.0, shape=None):
+    shp = slide.shapes.add_shape(
+        shape or _SHAPE.RECTANGLE, _In(x), _In(y), _In(w), _In(h)
+    )
+    shp.shadow.inherit = False
+    if fill is None:
+        shp.fill.background()
+    else:
+        shp.fill.solid()
+        shp.fill.fore_color.rgb = _hx(fill)
+    if line is None:
+        shp.line.fill.background()
+    else:
+        shp.line.color.rgb = _hx(line)
+        shp.line.width = _Pt(line_w)
+    return shp
+
+
+def _txt(slide, text, x, y, w, h, size=14, font="Calibri", color="1A2333",
+         bold=False, align="left", valign="top", spacing=None):
+    tb = slide.shapes.add_textbox(_In(x), _In(y), _In(w), _In(h))
+    tf = tb.text_frame
+    tf.word_wrap = True
+    tf.margin_left = 0
+    tf.margin_right = 0
+    tf.margin_top = 0
+    tf.margin_bottom = 0
+    tf.vertical_anchor = {
+        "top": _ANCHOR.TOP, "middle": _ANCHOR.MIDDLE, "bottom": _ANCHOR.BOTTOM
+    }[valign]
+    p = tf.paragraphs[0]
+    p.alignment = {"left": _ALIGN.LEFT, "center": _ALIGN.CENTER, "right": _ALIGN.RIGHT}[align]
+    run = p.add_run()
+    run.text = text
+    f = run.font
+    f.size = _Pt(size)
+    f.name = font
+    f.bold = bold
+    f.color.rgb = _hx(color)
+    if spacing:
+        run._r.get_or_add_rPr().set("spc", str(int(spacing * 100)))
+    return tb
+
+
+def _color_points(series, colors):
+    for i, pt in enumerate(series.points):
+        pt.format.fill.solid()
+        pt.format.fill.fore_color.rgb = _hx(colors[i % len(colors)])
+
+
+def _bar_chart(slide, x, y, w, h, labels, values, colors, body_font, text_soft, text):
+    cd = _ChartData()
+    cd.categories = labels
+    cd.add_series("Series 1", values)
+    gf = slide.shapes.add_chart(_CT.COLUMN_CLUSTERED, _In(x), _In(y), _In(w), _In(h), cd)
+    chart = gf.chart
+    chart.has_legend = False
+    chart.has_title = False
+    try:
+        chart.font.name = body_font
+        chart.font.size = _Pt(10)
+    except Exception:
+        pass
+    plot = chart.plots[0]
+    plot.has_data_labels = True
+    dl = plot.data_labels
+    dl.number_format = "#,##0"
+    dl.number_format_is_linked = False
+    dl.position = _LABPOS.OUTSIDE_END
+    dl.font.size = _Pt(9)
+    dl.font.color.rgb = _hx(text)
+    _color_points(plot.series[0], colors)
+    ca = chart.category_axis
+    va = chart.value_axis
+    ca.tick_labels.font.size = _Pt(10)
+    ca.tick_labels.font.color.rgb = _hx(text_soft)
+    va.tick_labels.font.size = _Pt(9)
+    va.tick_labels.font.color.rgb = _hx(text_soft)
+    return chart
+
+
+def _line_chart(slide, x, y, w, h, labels, values, color, body_font, text_soft):
+    cd = _ChartData()
+    cd.categories = labels
+    cd.add_series("Series 1", values)
+    gf = slide.shapes.add_chart(_CT.LINE, _In(x), _In(y), _In(w), _In(h), cd)
+    chart = gf.chart
+    chart.has_legend = False
+    chart.has_title = False
+    try:
+        chart.font.name = body_font
+        chart.font.size = _Pt(10)
+    except Exception:
+        pass
+    series = chart.plots[0].series[0]
+    series.smooth = True
+    series.format.line.color.rgb = _hx(color)
+    series.format.line.width = _Pt(2.5)
+    ca = chart.category_axis
+    va = chart.value_axis
+    ca.tick_labels.font.size = _Pt(10)
+    ca.tick_labels.font.color.rgb = _hx(text_soft)
+    va.tick_labels.font.size = _Pt(9)
+    va.tick_labels.font.color.rgb = _hx(text_soft)
+    return chart
+
+
+def _doughnut_chart(slide, x, y, w, h, labels, values, colors, body_font):
+    cd = _ChartData()
+    cd.categories = labels
+    cd.add_series("Series 1", values)
+    gf = slide.shapes.add_chart(_CT.DOUGHNUT, _In(x), _In(y), _In(w), _In(h), cd)
+    chart = gf.chart
+    chart.has_title = False
+    chart.has_legend = True
+    chart.legend.position = _LEGPOS.BOTTOM
+    chart.legend.include_in_layout = False
+    chart.legend.font.size = _Pt(10)
+    try:
+        chart.font.name = body_font
+    except Exception:
+        pass
+    plot = chart.plots[0]
+    plot.has_data_labels = True
+    dl = plot.data_labels
+    dl.show_percentage = True
+    dl.show_value = False
+    dl.number_format = "0%"
+    dl.number_format_is_linked = False
+    dl.font.size = _Pt(10)
+    _color_points(plot.series[0], colors)
+    return chart
+
+
+# ── chart data extraction (reused) ──────────────────────────
+
+def _collect_chart_data(analytics) -> dict:
+    data: dict = {}
+    df = analytics.df
+
+    if analytics.categorical_cols:
+        cat = analytics.categorical_cols[0]
+        vc = df[cat].value_counts().head(7)
+        data["bar_chart"] = {
+            "title":  f"{cat} Breakdown",
+            "labels": [str(x) for x in vc.index.tolist()],
+            "values": [float(x) for x in vc.values.tolist()],
+        }
+
+    if len(analytics.categorical_cols) >= 2:
+        cat2 = analytics.categorical_cols[1]
+        vc2 = df[cat2].value_counts().head(6)
+        data["pie_chart"] = {
+            "title":  f"{cat2} Distribution",
+            "labels": [str(x) for x in vc2.index.tolist()],
+            "values": [float(x) for x in vc2.values.tolist()],
+        }
+
+    if analytics.datetime_cols and analytics.numeric_cols:
+        dc = analytics.datetime_cols[0]
+        vc_col = analytics.money_cols[0] if analytics.money_cols else analytics.numeric_cols[0]
+        ts = df[[dc, vc_col]].dropna().sort_values(dc)
+        if len(ts) > 14:
+            try:
+                ts = ts.set_index(dc).resample("M")[vc_col].sum().reset_index()
+            except Exception:
+                ts = ts.iloc[::max(1, len(ts) // 12)]
+        data["line_chart"] = {
+            "title":  f"{vc_col} Trend",
+            "labels": [str(x)[:7] for x in ts[dc].tolist()],
+            "values": [float(x) for x in ts[vc_col].fillna(0).tolist()],
+        }
+
+    return data
+
+
+# ── narrative payload (reused; LLM optional) ────────────────
+
+def _build_payload(analytics, emphasis: str, theme_cfg: dict, font_cfg: dict) -> dict:
+    a = analytics
+    ins = a.insights
+    b = ins["basic_stats"]
+
+    exec_summary = st.session_state.get("exec_summary") or a._fallback_summary()
+    takeaways    = st.session_state.get("takeaways")    or a._fallback_takeaways()
+    quality_status, quality_score, quality_summary = a.get_data_quality_report()
+
+    kpis = [
+        {"label": "Records Analyzed", "value": f"{b['rows']:,}",            "desc": "rows of business data"},
+        {"label": "Dimensions",        "value": str(b["columns"]),           "desc": f"{ins['column_types']['numeric']} numeric · {ins['column_types']['categorical']} categorical"},
+        {"label": "Data Completeness",  "value": f"{100 - b['missing_pct']:.1f}%", "desc": "proportion of non-null values"},
+    ]
+    if "monetary" in ins:
+        m = ins["monetary"]
+        kpis.append({"label": "Total Value", "value": f"${m['total']:,.0f}", "desc": f"avg ${m['avg']:,.2f}/record"})
+    else:
+        kpis.append({"label": "Numeric Columns", "value": str(ins["column_types"]["numeric"]), "desc": "quantifiable dimensions"})
+
+    domain          = "Business Intelligence Report"
+    subtitle        = f"AI-powered analysis of {b['rows']:,} records across {b['columns']} dimensions"
+    recommendations = list(takeaways)
+    closing_message = "Data is the compass. Let KiteIQX Intelligence be your guide."
+
+    if a.llm:
+        emphasis_clause = f"User emphasis: {emphasis}" if emphasis.strip() else "General analysis — surface the most strategic angle."
+        try:
+            prompt = (
+                f"Dataset summary: {exec_summary[:350]}\n"
+                f"Key takeaways: {'; '.join(takeaways)}\n"
+                f"{emphasis_clause}\n\n"
+                "Return ONLY valid JSON (no markdown fences, no preamble) with this exact structure:\n"
+                '{"domain":"2-4 word business domain","subtitle":"compelling subtitle max 12 words",'
+                '"recommendations":["actionable rec 1","actionable rec 2","actionable rec 3"],'
+                '"closing_message":"one powerful closing sentence"}'
+            )
+            raw = a.llm.predict(prompt, max_tokens=450)
+            raw = re.sub(r"```json|```", "", raw).strip()
+            parsed = _json.loads(raw)
+            domain          = parsed.get("domain",          domain)
+            subtitle        = parsed.get("subtitle",        subtitle)
+            recommendations = parsed.get("recommendations", recommendations)
+            closing_message = parsed.get("closing_message", closing_message)
+        except Exception:
+            pass
+
+    return {
+        "theme":  theme_cfg,
+        "fonts":  font_cfg,
+        "charts": _collect_chart_data(analytics),
+        "content": {
+            "domain":          domain,
+            "subtitle":        subtitle,
+            "date":            _dt.now().strftime("%B %Y"),
+            "exec_summary":    exec_summary,
+            "takeaways":       takeaways,
+            "kpis":            kpis,
+            "quality": {
+                "score":   quality_score,
+                "status":  quality_status,
+                "summary": quality_summary.replace("**", "").replace("  \n", " | "),
+            },
+            "recommendations": recommendations,
+            "closing_message": closing_message,
+            "emphasis":        emphasis,
+        },
+    }
+
+
+# ── the deck builder ────────────────────────────────────────
+
+def _build_pptx_python(payload: dict, out_path: str):
+    """Build the 9-slide deck with python-pptx. Returns (success, message)."""
+    if not PPTX_PY_AVAILABLE:
+        return False, "python-pptx not installed. Add `python-pptx` to requirements.txt."
+
+    th = payload["theme"]
+    fonts = payload["fonts"]
+    c = payload["content"]
+    charts = payload["charts"]
+    HF, BF = fonts["header"], fonts["body"]
+
+    prs = _Prs()
+    prs.slide_width = _In(10)
+    prs.slide_height = _In(5.625)
+    blank = prs.slide_layouts[6]
+    H = 5.625
+
+    def num_circle(slide, n, x, y, d, fill, txt_color):
+        _rect(slide, x, y, d, d, fill=fill, shape=_SHAPE.OVAL)
+        _txt(slide, str(n), x, y, d, d, size=18, font=HF, color=txt_color,
+             bold=True, align="center", valign="middle")
+
+    def sec_header(slide, title):
+        _txt(slide, title, 0.5, 0.22, 9.0, 0.5, size=24, font=HF,
+             color=th["primary"], bold=True)
+
+    def slide_num(slide, n):
+        _txt(slide, str(n), 9.55, 5.28, 0.35, 0.25, size=8, font=BF,
+             color=th["text_soft"], align="right")
+
+    # ── SLIDE 1: TITLE ──────────────────────────────────────
+    s = prs.slides.add_slide(blank)
+    _bg(s, th["primary"])
+    _rect(s, 0, 0, 0.14, H, fill=th["accent"])
+    _rect(s, 8.2, 0, 1.8, 1.6, fill=th["secondary"])
+    _txt(s, "KITEIQX INTELLIGENCE", 0.46, 0.85, 7.5, 0.4, size=10, font=BF,
+         color=th["accent"], bold=True, spacing=4)
+    title_text = c.get("domain") or "Business Intelligence Report"
+    _txt(s, title_text, 0.46, 1.4, 9.2, 2.1,
+         size=36 if len(title_text) > 35 else 44, font=HF, color="FFFFFF", bold=True)
+    _txt(s, c.get("subtitle", ""), 0.46, 3.6, 8.0, 0.85, size=14, font=BF, color="94A3B8")
+    _txt(s, c.get("date", ""), 0.46, 5.0, 3.5, 0.36, size=10, font=BF, color=th["accent"])
+    _txt(s, "Powered by KiteIQX Intelligence", 6.0, 5.0, 3.85, 0.36,
+         size=9, font=BF, color="475569", align="right")
+
+    # ── SLIDE 2: EXECUTIVE SUMMARY ──────────────────────────
+    s = prs.slides.add_slide(blank)
+    _bg(s, th["background"])
+    sec_header(s, "Business Story")
+    slide_num(s, 2)
+    _rect(s, 0.4, 0.9, 5.9, 4.35, fill=th["surface"], line="E2E8F0", line_w=1)
+    _rect(s, 0.4, 0.9, 0.09, 4.35, fill=th["accent"])
+    _txt(s, c.get("exec_summary", ""), 0.65, 1.05, 5.45, 4.0, size=13, font=BF,
+         color=th["text"], valign="top")
+    for i, kpi in enumerate((c.get("kpis") or [])[:4]):
+        y = 0.9 + i * 1.12
+        _rect(s, 6.55, y, 3.15, 0.98, fill="FFFFFF", line="E2E8F0", line_w=1)
+        _rect(s, 6.7, y + 0.22, 0.22, 0.22, fill=th["accent"], shape=_SHAPE.OVAL)
+        _txt(s, kpi.get("label", ""), 7.06, y + 0.08, 2.5, 0.26, size=9, font=BF,
+             color=th["text_soft"], bold=True)
+        _txt(s, kpi.get("value", ""), 6.6, y + 0.36, 3.0, 0.42, size=20, font=HF,
+             color=th["primary"], bold=True)
+        _txt(s, kpi.get("desc", ""), 6.6, y + 0.75, 3.0, 0.2, size=8, font=BF,
+             color=th["text_soft"])
+
+    # ── SLIDE 3: KPI DASHBOARD ──────────────────────────────
+    s = prs.slides.add_slide(blank)
+    _bg(s, th["primary"])
+    _txt(s, "Key Metrics", 0.5, 0.28, 9, 0.65, size=28, font=HF, color="FFFFFF", bold=True)
+    _txt(s, "At a glance — the numbers that matter most", 0.5, 0.98, 9, 0.35,
+         size=12, font=BF, color=th["accent"])
+    slide_num(s, 3)
+    kpis = (c.get("kpis") or [])[:4]
+    n = len(kpis)
+    card_w = 2.1 if n == 4 else 2.8 if n == 3 else 4.2
+    gap = 0.22
+    total_w = n * card_w + (n - 1) * gap
+    start_x = (10 - total_w) / 2
+    card_y, card_h = 1.48, 3.6
+    for i, kpi in enumerate(kpis):
+        x = start_x + i * (card_w + gap)
+        _rect(s, x, card_y, card_w, card_h, fill=th["secondary"])
+        _rect(s, x, card_y, card_w, 0.08, fill=th["accent"])
+        _txt(s, kpi.get("label", ""), x + 0.12, card_y + 0.18, card_w - 0.24, 0.4,
+             size=9, font=BF, color="94A3B8", bold=True)
+        val = kpi.get("value", "")
+        val_fs = 20 if len(val) > 7 else 26 if len(val) > 5 else 34
+        _txt(s, val, x + 0.1, card_y + 0.72, card_w - 0.2, 1.4, size=val_fs, font=HF,
+             color="FFFFFF", bold=True, align="center", valign="middle")
+        _txt(s, kpi.get("desc", ""), x + 0.1, card_y + 2.92, card_w - 0.2, 0.55,
+             size=9, font=BF, color="94A3B8", align="center")
+
+    # ── SLIDE 4: CATEGORY ANALYSIS (bar) ────────────────────
+    bar = charts.get("bar_chart")
+    if bar and bar.get("labels"):
+        s = prs.slides.add_slide(blank)
+        _bg(s, th["background"])
+        sec_header(s, bar.get("title", "Category Analysis"))
+        slide_num(s, 4)
+        _bar_chart(
+            s, 0.5, 0.9, 9, 4.4, bar["labels"], bar["values"],
+            [th["primary"], th["secondary"], th["accent"], "64748B", "94A3B8", "CBD5E1"],
+            BF, th["text_soft"], th["text"],
+        )
+
+    # ── SLIDE 5: TREND or DISTRIBUTION ──────────────────────
+    line = charts.get("line_chart")
+    pie = charts.get("pie_chart")
+    if line and line.get("labels"):
+        s = prs.slides.add_slide(blank)
+        _bg(s, th["background"])
+        sec_header(s, line.get("title", "Trend Analysis"))
+        slide_num(s, 5)
+        _line_chart(s, 0.5, 0.9, 9, 4.4, line["labels"], line["values"],
+                    th["primary"], BF, th["text_soft"])
+    elif pie and pie.get("labels"):
+        s = prs.slides.add_slide(blank)
+        _bg(s, th["background"])
+        sec_header(s, pie.get("title", "Distribution"))
+        slide_num(s, 5)
+        _doughnut_chart(
+            s, 0.3, 0.85, 5.5, 4.5, pie["labels"], pie["values"],
+            [th["primary"], th["accent"], th["secondary"], "64748B", "94A3B8", "CBD5E1"], BF,
+        )
+        top_labels = pie["labels"][:4]
+        top_vals = pie["values"][:4]
+        total = sum(top_vals) or 1
+        for i, label in enumerate(top_labels):
+            pct = top_vals[i] / total * 100
+            y = 1.05 + i * 1.08
+            _rect(s, 6.1, y, 3.65, 0.9, fill="FFFFFF", line="E2E8F0", line_w=1)
+            _txt(s, str(label), 6.25, y + 0.07, 2.5, 0.3, size=11, font=BF,
+                 color=th["text"], bold=True)
+            _txt(s, f"{pct:.1f}%", 8.65, y + 0.05, 0.9, 0.38, size=18, font=HF,
+                 color=th["primary"], bold=True, align="right")
+            _txt(s, f"{round(top_vals[i]):,} records", 6.25, y + 0.54, 3.3, 0.28,
+                 size=9, font=BF, color=th["text_soft"])
+
+    # ── SLIDE 6: STRATEGIC TAKEAWAYS ────────────────────────
+    s = prs.slides.add_slide(blank)
+    _bg(s, th["background"])
+    sec_header(s, "3 Decisions This Data Supports")
+    slide_num(s, 6)
+    circle_colors = [th["primary"], th["accent"], th["secondary"]]
+    num_colors = ["FFFFFF", "2A1B00", "FFFFFF"]
+    for i, t in enumerate((c.get("takeaways") or [])[:3]):
+        y = 0.9 + i * 1.5
+        _rect(s, 0.4, y, 9.2, 1.3, fill="FFFFFF", line="E2E8F0", line_w=1)
+        num_circle(s, i + 1, 0.54, y + 0.33, 0.66, circle_colors[i], num_colors[i])
+        _txt(s, t, 1.38, y + 0.1, 8.1, 1.12, size=13, font=BF, color=th["text"], valign="middle")
+
+    # ── SLIDE 7: DATA QUALITY ───────────────────────────────
+    s = prs.slides.add_slide(blank)
+    _bg(s, th["background"])
+    sec_header(s, "Data Quality Assessment")
+    slide_num(s, 7)
+    q = c.get("quality", {"score": 85, "status": "good", "summary": ""})
+    sc = q.get("score", 85)
+    clr = "15803D" if sc >= 90 else "0369A1" if sc >= 75 else "B45309" if sc >= 60 else "B91C1C"
+    label = {"excellent": "Excellent", "good": "Good", "fair": "Needs Attention",
+             "poor": "Poor"}.get(q.get("status"), "Fair")
+    _rect(s, 0.65, 1.0, 3.0, 3.0, fill="FFFFFF", line=clr, line_w=5, shape=_SHAPE.OVAL)
+    _txt(s, str(sc), 0.65, 1.5, 3.0, 1.6, size=64, font=HF, color=clr, bold=True,
+         align="center", valign="middle")
+    _txt(s, "/100", 0.65, 3.0, 3.0, 0.4, size=13, font=BF, color=clr, align="center")
+    _txt(s, label, 0.65, 3.88, 3.0, 0.45, size=14, font=HF, color=clr, bold=True, align="center")
+    _txt(s, "Quality Summary", 4.1, 1.0, 5.5, 0.42, size=14, font=HF, color=th["primary"], bold=True)
+    _txt(s, q.get("summary") or "Dataset is ready for analysis.", 4.1, 1.5, 5.5, 3.0,
+         size=12, font=BF, color=th["text"], valign="top")
+    _rect(s, 0.4, 4.65, 9.2, 0.58, fill=th["surface"], line="E2E8F0", line_w=1)
+    _txt(s, "For column-level detail, open the Data Quality tab in KiteIQX Intelligence.",
+         0.6, 4.68, 8.8, 0.5, size=10, font=BF, color=th["text_soft"], valign="middle")
+
+    # ── SLIDE 8: RECOMMENDATIONS ────────────────────────────
+    s = prs.slides.add_slide(blank)
+    _bg(s, th["background"])
+    sec_header(s, "Recommended Next Steps")
+    slide_num(s, 8)
+    for i, rec in enumerate((c.get("recommendations") or [])[:3]):
+        y = 0.9 + i * 1.54
+        _rect(s, 0.4, y, 9.2, 1.37, fill="FFFFFF" if i % 2 == 0 else th["surface"],
+              line="E2E8F0", line_w=1)
+        _rect(s, 0.4, y, 0.55, 1.37, fill=th["primary"])
+        _txt(s, str(i + 1), 0.4, y, 0.55, 1.37, size=22, font=HF, color="FFFFFF",
+             bold=True, align="center", valign="middle")
+        _txt(s, rec, 1.1, y + 0.12, 8.35, 1.12, size=13, font=BF, color=th["text"], valign="middle")
+
+    # ── SLIDE 9: CLOSING ────────────────────────────────────
+    s = prs.slides.add_slide(blank)
+    _bg(s, th["primary"])
+    _rect(s, 0, 0, 0.14, H, fill=th["accent"])
+    _rect(s, 10 - 2.8, H - 2.2, 2.8, 2.2, fill=th["secondary"])
+    _txt(s, "KITEIQX INTELLIGENCE", 0.46, 0.9, 9, 0.42, size=10, font=BF,
+         color=th["accent"], bold=True, spacing=4)
+    _txt(s, c.get("closing_message", "Thank You"), 0.46, 1.55, 9, 2.1, size=36, font=HF,
+         color="FFFFFF", bold=True)
+    _txt(s, "Generated by KiteIQX Intelligence · " + c.get("date", ""), 0.46, 3.95, 9, 0.42,
+         size=10, font=BF, color="475569")
+    _txt(s, "kiteiqx.com", 0.46, 4.48, 4, 0.42, size=14, font=BF, color=th["accent"], bold=True)
+
+    prs.save(out_path)
+    size_kb = _Path(out_path).stat().st_size // 1024
+    return True, f"Generated {_Path(out_path).name} ({size_kb} KB)"
+
+
+# ── Streamlit UI ────────────────────────────────────────────
+
+def render_presentation_maker():
+    a = st.session_state.get("analytics")
+    if a is None:
+        st.info("Upload or load data first (use the sidebar), then come back here to generate your deck.")
+        return
+
+    if not PPTX_PY_AVAILABLE:
+        st.error(
+            "The `python-pptx` package isn't installed. Add a line `python-pptx` to your "
+            "requirements.txt and redeploy — that's the only dependency this tab needs."
+        )
+        return
+
+    st.markdown(
+        '<div class="kx-card">'
+        '<div class="kx-card-title">Presentation Maker</div>'
+        '<div class="kx-card-sub">Transform your analysis into a polished, CEO-ready slide deck — '
+        'no PowerPoint experience needed. Customize the story, design, and download in seconds.</div>'
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    # 1 · Story Focus
+    st.markdown(
+        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
+        'color:#4a5568;font-weight:700;margin:1.4rem 0 0.5rem;">1 · Story Focus</div>',
+        unsafe_allow_html=True,
+    )
+    existing = st.session_state.get("takeaways", [])
+    if existing:
+        st.markdown(
+            '<div class="kx-callout" style="margin-bottom:0.75rem;">'
+            "<strong>Current story from the data:</strong><br>"
+            + "<br>".join(f"&nbsp;&nbsp;{i+1}. {t}" for i, t in enumerate(existing))
+            + "</div>",
+            unsafe_allow_html=True,
+        )
+    emphasis = st.text_area(
+        "Angle or message to emphasize  (optional — leave blank to use the AI-detected story)",
+        placeholder='e.g. "Focus on the revenue concentration risk in Electronics."',
+        height=88, key="ppt_emphasis",
+    )
+
+    # 2 · Design
+    st.markdown(
+        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
+        'color:#4a5568;font-weight:700;margin:1.4rem 0 0.5rem;">2 · Design & Style</div>',
+        unsafe_allow_html=True,
+    )
+    d1, d2 = st.columns(2)
+    with d1:
+        theme_name = st.selectbox("Color theme", list(PPTX_THEMES.keys()), index=0, key="ppt_theme")
+    with d2:
+        font_name = st.selectbox("Font pairing", list(PPTX_FONTS.keys()), index=0, key="ppt_font")
+
+    theme_cfg = dict(PPTX_THEMES[theme_name])
+    if theme_name == "Custom":
+        cc1, cc2, cc3 = st.columns(3)
+        with cc1:
+            theme_cfg["primary"] = st.color_picker("Primary", f"#{theme_cfg['primary']}", key="ppt_cp").lstrip("#")
+        with cc2:
+            theme_cfg["accent"] = st.color_picker("Accent", f"#{theme_cfg['accent']}", key="ppt_ca").lstrip("#")
+        with cc3:
+            theme_cfg["secondary"] = st.color_picker("Secondary", f"#{theme_cfg['secondary']}", key="ppt_cs").lstrip("#")
+    else:
+        swatches = [theme_cfg["primary"], theme_cfg["accent"], theme_cfg["surface"], theme_cfg["text"]]
+        html = "".join(
+            f'<div style="width:30px;height:30px;border-radius:6px;background:#{h};border:1px solid #e3e6ee;"></div>'
+            for h in swatches
+        )
+        st.markdown(
+            f'<div style="display:flex;gap:0.45rem;align-items:center;margin-bottom:0.5rem;">{html}'
+            f'<span style="color:#4a5568;font-size:0.82rem;margin-left:0.4rem;">Theme palette preview</span></div>',
+            unsafe_allow_html=True,
+        )
+
+    font_cfg = PPTX_FONTS[font_name]
+    st.markdown(
+        f'<p style="font-family:{font_cfg["header"]};font-size:1.05rem;font-weight:700;'
+        f'color:#1a2333;margin:0 0 0.15rem 0;">Header — {font_cfg["header"]}</p>'
+        f'<p style="font-family:{font_cfg["body"]};font-size:0.9rem;color:#4a5568;margin:0 0 1rem 0;">'
+        f"Body — {font_cfg['body']}</p>",
+        unsafe_allow_html=True,
+    )
+
+    # 3 · Custom template
+    st.markdown(
+        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
+        'color:#4a5568;font-weight:700;margin:1.4rem 0 0.5rem;">3 · Custom Template  (optional)</div>',
+        unsafe_allow_html=True,
+    )
+    with st.expander("Upload your branded .pptx template"):
+        st.info(
+            "Drop your company template here. KiteIQX will read its color scheme and prioritize "
+            "it over the theme selected above."
+        )
+        tpl_file = st.file_uploader("Choose a .pptx file", type=["pptx"], key="ppt_template")
+        if tpl_file is not None:
+            try:
+                import io as _io
+                prs_obj = _Prs(_io.BytesIO(tpl_file.read()))
+                st.success(
+                    f"Template '{tpl_file.name}' loaded — {len(prs_obj.slide_layouts)} layouts detected. "
+                    "Theme selection above will be applied to the generated deck."
+                )
+            except Exception as e:
+                st.warning(f"Could not parse template: {e}. Using the selected theme instead.")
+
+    # 4 · Outline
+    st.markdown(
+        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
+        'color:#4a5568;font-weight:700;margin:1.4rem 0 0.5rem;">4 · What&apos;s in the Deck</div>',
+        unsafe_allow_html=True,
+    )
+    chart_data = _collect_chart_data(a)
+    outline = [
+        ("1", "Title", "Dataset name, subtitle, date"),
+        ("2", "Business Story", "Executive narrative + KPI sidebar"),
+        ("3", "Key Metrics", "4 headline KPIs on a dark dashboard slide"),
+    ]
+    if chart_data.get("bar_chart"):
+        outline.append(("4", "Category Analysis",
+                         chart_data["bar_chart"]["title"] + f"  ({len(chart_data['bar_chart']['labels'])} categories)"))
+    else:
+        outline.append(("4", "Category Analysis", "Generates when categorical data is present"))
+    if chart_data.get("line_chart"):
+        outline.append(("5", "Trend Analysis", chart_data["line_chart"]["title"]))
+    elif chart_data.get("pie_chart"):
+        outline.append(("5", "Distribution", chart_data["pie_chart"]["title"] + " — doughnut + share cards"))
+    else:
+        outline.append(("5", "Trend / Distribution", "Generates when time or 2nd categorical data is present"))
+    outline += [
+        ("6", "Strategic Takeaways", "3 numbered decision cards"),
+        ("7", "Data Quality", "Score gauge + quality summary"),
+        ("8", "Recommendations", "3 actionable next steps"),
+        ("9", "Closing", "Brand close with key message"),
+    ]
+    rows = ""
+    for num, title, sub in outline:
+        rows += (
+            f'<div style="display:flex;gap:0.65rem;align-items:center;padding:0.32rem 0;'
+            f'border-bottom:1px solid #e3e6ee;">'
+            f'<div style="flex:0 0 26px;width:26px;height:26px;border-radius:5px;background:#0a2540;'
+            f'color:#c79a3a;font-size:0.72rem;font-weight:700;display:flex;align-items:center;'
+            f'justify-content:center;">{num}</div>'
+            f'<div><strong style="color:#1a2333;font-size:0.9rem;">{title}</strong> '
+            f'<span style="color:#4a5568;font-size:0.82rem;">— {sub}</span></div></div>'
+        )
+    st.markdown(f'<div class="kx-card" style="padding:0.75rem 1rem;">{rows}</div>', unsafe_allow_html=True)
+
+    # 5 · Generate
+    st.markdown(
+        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
+        'color:#4a5568;font-weight:700;margin:1.4rem 0 0.5rem;">5 · Generate</div>',
+        unsafe_allow_html=True,
+    )
+    gen_col, _ = st.columns([2, 5])
+    with gen_col:
+        generate = st.button("Generate Presentation", type="primary", key="ppt_generate", use_container_width=True)
+
+    if generate:
+        bar = st.progress(0, text="Drafting narrative with KiteIQX AI…")
+        payload = _build_payload(a, emphasis.strip(), theme_cfg, font_cfg)
+        bar.progress(55, text="Building slides…")
+        out_dir = _Path("data/uploads")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ts = _dt.now().strftime("%Y%m%d_%H%M%S")
+        fname = st.session_state.get("upload_filename", "analysis").replace(".", "_")
+        out_path = str(out_dir / f"KiteIQX_{fname}_{ts}.pptx")
+        success, msg = _build_pptx_python(payload, out_path)
+        bar.progress(100, text="Done!")
+        bar.empty()
+        if success:
+            st.session_state["ppt_out_path"] = out_path
+            st.session_state["ppt_payload"] = payload
+            st.success(f"Presentation ready  ·  9 slides  ·  {payload['content']['domain']}")
+        else:
+            st.error(msg)
+
+    # Download
+    if st.session_state.get("ppt_out_path") and _Path(st.session_state["ppt_out_path"]).exists():
+        out_path = st.session_state["ppt_out_path"]
+        with open(out_path, "rb") as f:
+            data = f.read()
+        st.markdown("---")
+        dl_col, sum_col = st.columns([2, 4])
+        with dl_col:
+            st.download_button(
+                "⬇ Download .pptx", data=data,
+                file_name=_Path(out_path).name,
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                key="ppt_download", use_container_width=True,
+            )
+        with sum_col:
+            p = st.session_state.get("ppt_payload", {})
+            if p:
+                cc = p.get("content", {})
+                st.markdown(
+                    f'<div class="kx-card"><div class="kx-card-title">Deck summary</div>'
+                    f'<div style="font-size:0.98rem;color:#1a2333;"><strong>{cc.get("domain","")}</strong> '
+                    f'&nbsp;·&nbsp; 9 slides &nbsp;·&nbsp; {cc.get("date","")}</div>'
+                    f'<div style="font-size:0.85rem;color:#4a5568;margin-top:0.2rem;">{cc.get("subtitle","")}</div>'
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+        st.markdown(
+            '<div class="kx-callout" style="margin-top:0.75rem;">'
+            "<strong>Want to tweak the deck?</strong>  Change the theme, font, or story emphasis above "
+            "and click <em>Generate Presentation</em> again."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -1554,1041 +2304,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-# ============================================================
-# PRESENTATION MAKER  (ppt_tab — integrated)
-# ============================================================
-
-
-# ────────────────────────────────────────────────────────────
-# THEME PRESETS
-# ────────────────────────────────────────────────────────────
-
-PPTX_THEMES = {
-    "KiteIQX Brand": {
-        "primary":   "0A2540",
-        "secondary": "14304F",
-        "accent":    "C79A3A",
-        "background":"FFFFFF",
-        "surface":   "F7F8FB",
-        "text":      "1A2333",
-        "text_soft": "4A5568",
-    },
-    "Midnight Executive": {
-        "primary":   "1E2761",
-        "secondary": "16213E",
-        "accent":    "CADCFC",
-        "background":"FFFFFF",
-        "surface":   "F0F4FF",
-        "text":      "1E2761",
-        "text_soft": "4A5880",
-    },
-    "Coral Energy": {
-        "primary":   "2F3C7E",
-        "secondary": "3D4F9E",
-        "accent":    "F96167",
-        "background":"FFFFFF",
-        "surface":   "FFF8F8",
-        "text":      "1A1A2E",
-        "text_soft": "555577",
-    },
-    "Charcoal Minimal": {
-        "primary":   "36454F",
-        "secondary": "263238",
-        "accent":    "607D8B",
-        "background":"FFFFFF",
-        "surface":   "F5F5F5",
-        "text":      "212121",
-        "text_soft": "616161",
-    },
-    "Forest & Moss": {
-        "primary":   "2C5F2D",
-        "secondary": "1B4332",
-        "accent":    "97BC62",
-        "background":"FFFFFF",
-        "surface":   "F0FFF4",
-        "text":      "1B4332",
-        "text_soft": "52796F",
-    },
-    "Custom": {
-        "primary":   "0A2540",
-        "secondary": "14304F",
-        "accent":    "C79A3A",
-        "background":"FFFFFF",
-        "surface":   "F7F8FB",
-        "text":      "1A2333",
-        "text_soft": "4A5568",
-    },
-}
-
-PPTX_FONTS = {
-    "Georgia + Calibri  (Elegant)":        {"header": "Georgia",      "body": "Calibri"},
-    "Arial Black + Arial  (Bold)":         {"header": "Arial Black",  "body": "Arial"},
-    "Calibri  (Clean Modern)":             {"header": "Calibri",      "body": "Calibri Light"},
-    "Trebuchet + Calibri  (Professional)": {"header": "Trebuchet MS", "body": "Calibri"},
-    "Cambria + Calibri  (Classic)":        {"header": "Cambria",      "body": "Calibri"},
-}
-
-
-# ────────────────────────────────────────────────────────────
-# NODE.JS PPTX GENERATOR SCRIPT  (written to disk at runtime)
-# ────────────────────────────────────────────────────────────
-
-PPTX_GENERATOR_JS = r"""
-// KiteIQX Intelligence — PPTX Generator
-// Auto-generated — do not edit manually.
-
-const pptxgen = require("pptxgenjs");
-const fs      = require("fs");
-
-const DATA       = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-const { theme, fonts, content, charts, outputPath } = DATA;
-const W = 10, H = 5.625;
-
-let pres = new pptxgen();
-pres.layout = "LAYOUT_16x9";
-pres.title  = content.domain || "KiteIQX Intelligence Report";
-pres.author = "KiteIQX Intelligence";
-
-// ── shared helpers ────────────────────────────────────────
-
-// IMPORTANT: always call as a function — PptxGenJS mutates shadow objects.
-function mkShadow() {
-  return { type: "outer", blur: 8, offset: 2, angle: 135, color: "000000", opacity: 0.09 };
-}
-
-function secHeader(s, title) {
-  s.addText(title, {
-    x: 0.5, y: 0.22, w: W - 1, h: 0.5,
-    fontSize: 24, fontFace: fonts.header,
-    color: theme.primary, bold: true, margin: 0,
-  });
-}
-
-function slideNum(s, n) {
-  s.addText(String(n), {
-    x: 9.55, y: 5.28, w: 0.35, h: 0.25,
-    fontSize: 8, fontFace: fonts.body,
-    color: theme.text_soft, align: "right", margin: 0,
-  });
-}
-
-// ── SLIDE 1: TITLE ───────────────────────────────────────
-{
-  let s = pres.addSlide();
-  s.background = { color: theme.primary };
-
-  // Left accent strip
-  s.addShape(pres.shapes.RECTANGLE, {
-    x: 0, y: 0, w: 0.14, h: H,
-    fill: { color: theme.accent }, line: { color: theme.accent, width: 0 },
-  });
-
-  // Decorative corner block
-  s.addShape(pres.shapes.RECTANGLE, {
-    x: 8.2, y: 0, w: 1.8, h: 1.6,
-    fill: { color: theme.accent, transparency: 82 },
-    line: { color: theme.accent, width: 0 },
-  });
-
-  // Brand label
-  s.addText("KITEIQX INTELLIGENCE", {
-    x: 0.46, y: 0.85, w: 7.5, h: 0.4,
-    fontSize: 10, fontFace: fonts.body,
-    color: theme.accent, bold: true, charSpacing: 4, margin: 0,
-  });
-
-  // Main title
-  const titleText = content.domain || "Business Intelligence Report";
-  s.addText(titleText, {
-    x: 0.46, y: 1.4, w: 9.2, h: 2.1,
-    fontSize: titleText.length > 35 ? 36 : 44,
-    fontFace: fonts.header, color: "FFFFFF", bold: true, margin: 0,
-  });
-
-  // Subtitle
-  s.addText(content.subtitle || "AI-powered data intelligence", {
-    x: 0.46, y: 3.6, w: 8.0, h: 0.85,
-    fontSize: 14, fontFace: fonts.body, color: "94A3B8", margin: 0,
-  });
-
-  // Footer row
-  s.addText(content.date || "", {
-    x: 0.46, y: 5.0, w: 3.5, h: 0.36,
-    fontSize: 10, fontFace: fonts.body, color: theme.accent, margin: 0,
-  });
-  s.addText("Powered by KiteIQX Intelligence", {
-    x: 6.0, y: 5.0, w: 3.85, h: 0.36,
-    fontSize: 9, fontFace: fonts.body, color: "475569",
-    align: "right", margin: 0,
-  });
-}
-
-// ── SLIDE 2: EXECUTIVE SUMMARY ───────────────────────────
-{
-  let s = pres.addSlide();
-  s.background = { color: theme.background };
-  secHeader(s, "Business Story");
-  slideNum(s, 2);
-
-  // Narrative panel
-  s.addShape(pres.shapes.RECTANGLE, {
-    x: 0.4, y: 0.9, w: 5.9, h: 4.35,
-    fill: { color: theme.surface },
-    line: { color: "E2E8F0", width: 1 },
-    shadow: mkShadow(),
-  });
-  // Gold left border
-  s.addShape(pres.shapes.RECTANGLE, {
-    x: 0.4, y: 0.9, w: 0.09, h: 4.35,
-    fill: { color: theme.accent }, line: { color: theme.accent, width: 0 },
-  });
-  s.addText(content.exec_summary || "No summary available.", {
-    x: 0.65, y: 1.05, w: 5.45, h: 4.0,
-    fontSize: 13, fontFace: fonts.body,
-    color: theme.text, margin: 0.08, valign: "top",
-  });
-
-  // Right: mini KPI stack
-  const kpis = (content.kpis || []).slice(0, 4);
-  kpis.forEach((kpi, i) => {
-    const y = 0.9 + i * 1.12;
-    s.addShape(pres.shapes.RECTANGLE, {
-      x: 6.55, y, w: 3.15, h: 0.98,
-      fill: { color: "FFFFFF" },
-      line: { color: "E2E8F0", width: 1 },
-      shadow: mkShadow(),
-    });
-    s.addShape(pres.shapes.OVAL, {
-      x: 6.7, y: y + 0.22, w: 0.22, h: 0.22,
-      fill: { color: theme.accent }, line: { color: theme.accent, width: 0 },
-    });
-    s.addText(kpi.label || "", {
-      x: 7.06, y: y + 0.08, w: 2.5, h: 0.26,
-      fontSize: 9, fontFace: fonts.body,
-      color: theme.text_soft, bold: true, margin: 0,
-    });
-    s.addText(kpi.value || "", {
-      x: 6.6, y: y + 0.36, w: 3.0, h: 0.42,
-      fontSize: 20, fontFace: fonts.header,
-      color: theme.primary, bold: true, margin: 0,
-    });
-    s.addText(kpi.desc || "", {
-      x: 6.6, y: y + 0.75, w: 3.0, h: 0.2,
-      fontSize: 8, fontFace: fonts.body, color: theme.text_soft, margin: 0,
-    });
-  });
-}
-
-// ── SLIDE 3: KPI DASHBOARD ───────────────────────────────
-{
-  let s = pres.addSlide();
-  s.background = { color: theme.primary };
-
-  s.addText("Key Metrics", {
-    x: 0.5, y: 0.28, w: 9, h: 0.65,
-    fontSize: 28, fontFace: fonts.header,
-    color: "FFFFFF", bold: true, margin: 0,
-  });
-  s.addText("At a glance — the numbers that matter most", {
-    x: 0.5, y: 0.98, w: 9, h: 0.35,
-    fontSize: 12, fontFace: fonts.body, color: theme.accent, margin: 0,
-  });
-  slideNum(s, 3);
-
-  const kpis = (content.kpis || []).slice(0, 4);
-  const cardW = kpis.length === 4 ? 2.1 : kpis.length === 3 ? 2.8 : 4.2;
-  const gap   = 0.22;
-  const totalW = kpis.length * cardW + (kpis.length - 1) * gap;
-  const startX = (W - totalW) / 2;
-  const cardY  = 1.48, cardH = 3.6;
-
-  kpis.forEach((kpi, i) => {
-    const x = startX + i * (cardW + gap);
-    s.addShape(pres.shapes.RECTANGLE, {
-      x, y: cardY, w: cardW, h: cardH,
-      fill: { color: "FFFFFF", transparency: 12 },
-      line: { color: "FFFFFF", transparency: 80, width: 1 },
-    });
-    // Top accent strip
-    s.addShape(pres.shapes.RECTANGLE, {
-      x, y: cardY, w: cardW, h: 0.08,
-      fill: { color: theme.accent }, line: { color: theme.accent, width: 0 },
-    });
-    s.addText(kpi.label || "", {
-      x: x + 0.12, y: cardY + 0.18, w: cardW - 0.24, h: 0.4,
-      fontSize: 9, fontFace: fonts.body, color: "94A3B8", bold: true, margin: 0,
-    });
-    const valLen = kpi.value ? kpi.value.length : 0;
-    const valFs  = valLen > 7 ? 20 : valLen > 5 ? 26 : 34;
-    s.addText(kpi.value || "", {
-      x: x + 0.1, y: cardY + 0.72, w: cardW - 0.2, h: 1.4,
-      fontSize: valFs, fontFace: fonts.header,
-      color: "FFFFFF", bold: true, align: "center", valign: "middle", margin: 0,
-    });
-    s.addText(kpi.desc || "", {
-      x: x + 0.1, y: cardY + 2.92, w: cardW - 0.2, h: 0.55,
-      fontSize: 9, fontFace: fonts.body,
-      color: "94A3B8", align: "center", margin: 0,
-    });
-  });
-}
-
-// ── SLIDE 4: CATEGORY ANALYSIS  (bar chart) ──────────────
-if (charts.bar_chart && (charts.bar_chart.labels || []).length > 0) {
-  let s = pres.addSlide();
-  s.background = { color: theme.background };
-  secHeader(s, charts.bar_chart.title || "Category Analysis");
-  slideNum(s, 4);
-
-  s.addChart(pres.charts.BAR, [{
-    name:   charts.bar_chart.title || "Count",
-    labels: charts.bar_chart.labels,
-    values: charts.bar_chart.values,
-  }], {
-    x: 0.5, y: 0.9, w: 9, h: 4.4,
-    barDir: "col",
-    chartColors: [
-      theme.primary, theme.secondary || theme.primary,
-      theme.accent, "64748B", "94A3B8", "CBD5E1",
-    ],
-    chartArea: { fill: { color: theme.background }, roundedCorners: false },
-    catAxisLabelColor:  theme.text_soft,
-    valAxisLabelColor:  theme.text_soft,
-    valGridLine: { color: "E2E8F0", size: 0.5 },
-    catGridLine: { style: "none" },
-    showValue:          true,
-    dataLabelColor:     theme.text,
-    dataLabelFontSize:  9,
-    dataLabelPosition:  "outEnd",
-    showLegend:         false,
-    catAxisLabelFontSize: 10,
-  });
-}
-
-// ── SLIDE 5: TREND  or  DISTRIBUTION ─────────────────────
-if (charts.line_chart && (charts.line_chart.labels || []).length > 0) {
-  let s = pres.addSlide();
-  s.background = { color: theme.background };
-  secHeader(s, charts.line_chart.title || "Trend Analysis");
-  slideNum(s, 5);
-
-  s.addChart(pres.charts.LINE, [{
-    name:   charts.line_chart.title || "Value",
-    labels: charts.line_chart.labels,
-    values: charts.line_chart.values,
-  }], {
-    x: 0.5, y: 0.9, w: 9, h: 4.4,
-    chartColors:  [theme.primary],
-    lineSize:     3,
-    lineSmooth:   true,
-    chartArea:    { fill: { color: theme.background }, roundedCorners: false },
-    catAxisLabelColor: theme.text_soft,
-    valAxisLabelColor: theme.text_soft,
-    valGridLine:  { color: "E2E8F0", size: 0.5 },
-    catGridLine:  { style: "none" },
-    showLegend:   false,
-    showValue:    false,
-    catAxisLabelFontSize: 10,
-  });
-} else if (charts.pie_chart && (charts.pie_chart.labels || []).length > 0) {
-  let s = pres.addSlide();
-  s.background = { color: theme.background };
-  secHeader(s, charts.pie_chart.title || "Distribution");
-  slideNum(s, 5);
-
-  s.addChart(pres.charts.DOUGHNUT, [{
-    name:   charts.pie_chart.title || "Share",
-    labels: charts.pie_chart.labels,
-    values: charts.pie_chart.values,
-  }], {
-    x: 0.3, y: 0.85, w: 5.5, h: 4.5,
-    chartColors: [
-      theme.primary, theme.accent, theme.secondary || "475569",
-      "64748B", "94A3B8", "CBD5E1",
-    ],
-    showPercent:  true,
-    showLegend:   true,
-    legendPos:    "b",
-    chartArea:    { fill: { color: theme.background } },
-    dataLabelFontSize: 10,
-  });
-
-  // Right: share cards
-  const topLabels = (charts.pie_chart.labels || []).slice(0, 4);
-  const topVals   = (charts.pie_chart.values  || []).slice(0, 4);
-  const total     = topVals.reduce((a, b) => a + b, 0);
-  topLabels.forEach((label, i) => {
-    const pct = total > 0 ? ((topVals[i] / total) * 100).toFixed(1) : "N/A";
-    const y = 1.05 + i * 1.08;
-    s.addShape(pres.shapes.RECTANGLE, {
-      x: 6.1, y, w: 3.65, h: 0.9,
-      fill: { color: "FFFFFF" },
-      line: { color: "E2E8F0", width: 1 },
-      shadow: mkShadow(),
-    });
-    s.addText(String(label), {
-      x: 6.25, y: y + 0.07, w: 2.5, h: 0.3,
-      fontSize: 11, fontFace: fonts.body,
-      color: theme.text, bold: true, margin: 0,
-    });
-    s.addText(pct + "%", {
-      x: 8.65, y: y + 0.05, w: 0.9, h: 0.38,
-      fontSize: 18, fontFace: fonts.header,
-      color: theme.primary, bold: true, align: "right", margin: 0,
-    });
-    s.addText(Math.round(topVals[i]).toString() + " records", {
-      x: 6.25, y: y + 0.54, w: 3.3, h: 0.28,
-      fontSize: 9, fontFace: fonts.body, color: theme.text_soft, margin: 0,
-    });
-  });
-}
-
-// ── SLIDE 6: STRATEGIC TAKEAWAYS ────────────────────────
-{
-  let s = pres.addSlide();
-  s.background = { color: theme.background };
-  secHeader(s, "3 Decisions This Data Supports");
-  slideNum(s, 6);
-
-  const takeaways    = (content.takeaways || []).slice(0, 3);
-  const circleColors = [theme.primary, theme.accent, theme.secondary || "475569"];
-  const numColors    = ["FFFFFF", "2A1B00", "FFFFFF"];
-
-  takeaways.forEach((t, i) => {
-    const y = 0.9 + i * 1.5;
-    s.addShape(pres.shapes.RECTANGLE, {
-      x: 0.4, y, w: 9.2, h: 1.32,
-      fill: { color: "FFFFFF" },
-      line: { color: "E2E8F0", width: 1 },
-      shadow: mkShadow(),
-    });
-    s.addShape(pres.shapes.OVAL, {
-      x: 0.54, y: y + 0.33, w: 0.66, h: 0.66,
-      fill: { color: circleColors[i] },
-      line: { color: circleColors[i], width: 0 },
-    });
-    s.addText(String(i + 1), {
-      x: 0.54, y: y + 0.33, w: 0.66, h: 0.66,
-      fontSize: 18, fontFace: fonts.header,
-      color: numColors[i], bold: true,
-      align: "center", valign: "middle", margin: 0,
-    });
-    s.addText(t, {
-      x: 1.38, y: y + 0.1, w: 8.1, h: 1.12,
-      fontSize: 13, fontFace: fonts.body,
-      color: theme.text, margin: 0.06, valign: "middle",
-    });
-  });
-}
-
-// ── SLIDE 7: DATA QUALITY ────────────────────────────────
-{
-  let s = pres.addSlide();
-  s.background = { color: theme.background };
-  secHeader(s, "Data Quality Assessment");
-  slideNum(s, 7);
-
-  const q     = content.quality || { score: 85, status: "good", summary: "" };
-  const clr   = q.score >= 90 ? "15803D"
-              : q.score >= 75 ? "0369A1"
-              : q.score >= 60 ? "B45309"
-              : "B91C1C";
-  const label = { excellent: "Excellent", good: "Good",
-                  fair: "Needs Attention", poor: "Poor" }[q.status] || "Fair";
-
-  // Score circle
-  s.addShape(pres.shapes.OVAL, {
-    x: 0.65, y: 1.0, w: 3.0, h: 3.0,
-    fill: { color: "FFFFFF" }, line: { color: clr, width: 5 }, shadow: mkShadow(),
-  });
-  s.addText(String(q.score), {
-    x: 0.65, y: 1.5, w: 3.0, h: 1.6,
-    fontSize: 64, fontFace: fonts.header,
-    color: clr, bold: true,
-    align: "center", valign: "middle", margin: 0,
-  });
-  s.addText("/100", {
-    x: 0.65, y: 3.0, w: 3.0, h: 0.4,
-    fontSize: 13, fontFace: fonts.body, color: clr, align: "center", margin: 0,
-  });
-  s.addText(label, {
-    x: 0.65, y: 3.88, w: 3.0, h: 0.45,
-    fontSize: 14, fontFace: fonts.header, color: clr, bold: true,
-    align: "center", margin: 0,
-  });
-
-  // Right panel
-  s.addText("Quality Summary", {
-    x: 4.1, y: 1.0, w: 5.5, h: 0.42,
-    fontSize: 14, fontFace: fonts.header, color: theme.primary, bold: true, margin: 0,
-  });
-  s.addText(q.summary || "Dataset is ready for analysis.", {
-    x: 4.1, y: 1.5, w: 5.5, h: 3.0,
-    fontSize: 12, fontFace: fonts.body, color: theme.text, margin: 0.1, valign: "top",
-  });
-
-  // Footer note
-  s.addShape(pres.shapes.RECTANGLE, {
-    x: 0.4, y: 4.65, w: 9.2, h: 0.58,
-    fill: { color: theme.surface || "F7F8FB" }, line: { color: "E2E8F0", width: 1 },
-  });
-  s.addText(
-    "For column-level detail, open the Data Quality tab in KiteIQX Intelligence.",
-    {
-      x: 0.6, y: 4.68, w: 8.8, h: 0.5,
-      fontSize: 10, fontFace: fonts.body, color: theme.text_soft, valign: "middle", margin: 0,
-    },
-  );
-}
-
-// ── SLIDE 8: RECOMMENDATIONS ────────────────────────────
-{
-  let s = pres.addSlide();
-  s.background = { color: theme.background };
-  secHeader(s, "Recommended Next Steps");
-  slideNum(s, 8);
-
-  (content.recommendations || []).slice(0, 3).forEach((rec, i) => {
-    const y = 0.9 + i * 1.54;
-    s.addShape(pres.shapes.RECTANGLE, {
-      x: 0.4, y, w: 9.2, h: 1.37,
-      fill: { color: i % 2 === 0 ? "FFFFFF" : (theme.surface || "F7F8FB") },
-      line: { color: "E2E8F0", width: 1 },
-      shadow: mkShadow(),
-    });
-    s.addShape(pres.shapes.RECTANGLE, {
-      x: 0.4, y, w: 0.55, h: 1.37,
-      fill: { color: theme.primary }, line: { color: theme.primary, width: 0 },
-    });
-    s.addText(String(i + 1), {
-      x: 0.4, y, w: 0.55, h: 1.37,
-      fontSize: 22, fontFace: fonts.header,
-      color: "FFFFFF", bold: true,
-      align: "center", valign: "middle", margin: 0,
-    });
-    s.addText(rec, {
-      x: 1.1, y: y + 0.12, w: 8.35, h: 1.12,
-      fontSize: 13, fontFace: fonts.body,
-      color: theme.text, margin: 0.08, valign: "middle",
-    });
-  });
-}
-
-// ── SLIDE 9: CLOSING ─────────────────────────────────────
-{
-  let s = pres.addSlide();
-  s.background = { color: theme.primary };
-
-  s.addShape(pres.shapes.RECTANGLE, {
-    x: 0, y: 0, w: 0.14, h: H,
-    fill: { color: theme.accent }, line: { color: theme.accent, width: 0 },
-  });
-  s.addShape(pres.shapes.RECTANGLE, {
-    x: W - 2.8, y: H - 2.2, w: 2.8, h: 2.2,
-    fill: { color: theme.accent, transparency: 84 },
-    line: { color: theme.accent, width: 0 },
-  });
-
-  s.addText("KITEIQX INTELLIGENCE", {
-    x: 0.46, y: 0.9, w: 9, h: 0.42,
-    fontSize: 10, fontFace: fonts.body,
-    color: theme.accent, bold: true, charSpacing: 4, margin: 0,
-  });
-  s.addText(content.closing_message || "Thank You", {
-    x: 0.46, y: 1.55, w: 9, h: 2.1,
-    fontSize: 36, fontFace: fonts.header, color: "FFFFFF", bold: true, margin: 0,
-  });
-  s.addText("Generated by KiteIQX Intelligence · " + (content.date || ""), {
-    x: 0.46, y: 3.95, w: 9, h: 0.42,
-    fontSize: 10, fontFace: fonts.body, color: "475569", margin: 0,
-  });
-  s.addText("kiteiqx.com", {
-    x: 0.46, y: 4.48, w: 4, h: 0.42,
-    fontSize: 14, fontFace: fonts.body, color: theme.accent, bold: true, margin: 0,
-  });
-}
-
-// ── write ─────────────────────────────────────────────────
-pres.writeFile({ fileName: outputPath })
-  .then(() => { console.log("SUCCESS:" + outputPath); })
-  .catch(e => { console.error("ERROR:" + e.message); process.exit(1); });
-"""
-
-
-# ────────────────────────────────────────────────────────────
-# PYTHON HELPERS
-# ────────────────────────────────────────────────────────────
-
-def _collect_chart_data(analytics) -> dict:
-    """Extract chart-ready data from the analytics object."""
-    data: dict = {}
-    df = analytics.df
-
-    # Bar — primary categorical breakdown
-    if analytics.categorical_cols:
-        cat = analytics.categorical_cols[0]
-        vc = df[cat].value_counts().head(7)
-        data["bar_chart"] = {
-            "title":  f"{cat} Breakdown",
-            "labels": [str(x) for x in vc.index.tolist()],
-            "values": [float(x) for x in vc.values.tolist()],
-        }
-
-    # Pie / doughnut — second categorical
-    if len(analytics.categorical_cols) >= 2:
-        cat2 = analytics.categorical_cols[1]
-        vc2 = df[cat2].value_counts().head(6)
-        data["pie_chart"] = {
-            "title":  f"{cat2} Distribution",
-            "labels": [str(x) for x in vc2.index.tolist()],
-            "values": [float(x) for x in vc2.values.tolist()],
-        }
-
-    # Line — time series
-    if analytics.datetime_cols and analytics.numeric_cols:
-        dc = analytics.datetime_cols[0]
-        vc_col = analytics.money_cols[0] if analytics.money_cols else analytics.numeric_cols[0]
-        ts = df[[dc, vc_col]].dropna().sort_values(dc)
-        if len(ts) > 14:
-            try:
-                ts = ts.set_index(dc).resample("M")[vc_col].sum().reset_index()
-            except Exception:
-                ts = ts.iloc[::max(1, len(ts) // 12)]
-        data["line_chart"] = {
-            "title":  f"{vc_col} Trend",
-            "labels": [str(x)[:7] for x in ts[dc].tolist()],
-            "values": [float(x) for x in ts[vc_col].fillna(0).tolist()],
-        }
-
-    return data
-
-
-def _build_payload(analytics, emphasis: str, theme_cfg: dict, font_cfg: dict) -> dict:
-    """Build the full JSON payload for the pptxgenjs script."""
-    a = analytics
-    ins = a.insights
-    b = ins["basic_stats"]
-
-    exec_summary = st.session_state.get("exec_summary") or a._fallback_summary()
-    takeaways    = st.session_state.get("takeaways")    or a._fallback_takeaways()
-    quality_status, quality_score, quality_summary = a.get_data_quality_report()
-
-    kpis = [
-        {"label": "Records Analyzed",  "value": f"{b['rows']:,}",                           "desc": "rows of business data"},
-        {"label": "Dimensions",         "value": str(b["columns"]),                          "desc": f"{ins['column_types']['numeric']} numeric · {ins['column_types']['categorical']} categorical"},
-        {"label": "Data Completeness",  "value": f"{100 - b['missing_pct']:.1f}%",          "desc": "proportion of non-null values"},
-    ]
-    if "monetary" in ins:
-        m = ins["monetary"]
-        kpis.append({"label": "Total Value", "value": f"${m['total']:,.0f}", "desc": f"avg ${m['avg']:,.2f}/record"})
-    else:
-        kpis.append({"label": "Numeric Columns", "value": str(ins["column_types"]["numeric"]), "desc": "quantifiable dimensions"})
-
-    # Defaults (used if LLM is unavailable or fails)
-    domain           = "Business Intelligence Report"
-    subtitle         = f"AI-powered analysis of {b['rows']:,} records across {b['columns']} dimensions"
-    recommendations  = list(takeaways)
-    closing_message  = "Data is the compass. Let KiteIQX Intelligence be your guide."
-
-    if a.llm:
-        emphasis_clause = f"User emphasis: {emphasis}" if emphasis.strip() else "General analysis — surface the most strategic angle."
-        try:
-            prompt = (
-                f"Dataset summary: {exec_summary[:350]}\n"
-                f"Key takeaways: {'; '.join(takeaways)}\n"
-                f"{emphasis_clause}\n\n"
-                "Return ONLY valid JSON (no markdown fences, no preamble) with this exact structure:\n"
-                '{"domain":"2-4 word business domain","subtitle":"compelling subtitle max 12 words",'
-                '"recommendations":["actionable rec 1","actionable rec 2","actionable rec 3"],'
-                '"closing_message":"one powerful closing sentence"}'
-            )
-            raw = a.llm.predict(prompt, max_tokens=450)
-            raw = re.sub(r"```json|```", "", raw).strip()
-            parsed = json.loads(raw)
-            domain          = parsed.get("domain",          domain)
-            subtitle        = parsed.get("subtitle",        subtitle)
-            recommendations = parsed.get("recommendations", recommendations)
-            closing_message = parsed.get("closing_message", closing_message)
-        except Exception:
-            pass  # fall back to defaults
-
-    return {
-        "theme":  theme_cfg,
-        "fonts":  font_cfg,
-        "charts": _collect_chart_data(analytics),
-        "content": {
-            "domain":          domain,
-            "subtitle":        subtitle,
-            "date":            datetime.now().strftime("%B %Y"),
-            "exec_summary":    exec_summary,
-            "takeaways":       takeaways,
-            "kpis":            kpis,
-            "quality": {
-                "score":   quality_score,
-                "status":  quality_status,
-                "summary": quality_summary.replace("**", "").replace("  \n", " | "),
-            },
-            "recommendations": recommendations,
-            "closing_message": closing_message,
-            "emphasis":        emphasis,
-        },
-    }
-
-
-def _ensure_pptxgenjs() -> tuple:
-    """Return (ok: bool, message: str). Installs pptxgenjs if missing."""
-    check = subprocess.run(
-        ["node", "-e", "require('pptxgenjs')"],
-        capture_output=True, text=True, timeout=10,
-    )
-    if check.returncode == 0:
-        return True, "pptxgenjs ready"
-    result = subprocess.run(
-        ["npm", "install", "-g", "pptxgenjs"],
-        capture_output=True, text=True, timeout=180,
-    )
-    if result.returncode == 0:
-        return True, "pptxgenjs installed"
-    return False, result.stderr[:300]
-
-
-def _run_pptx_generator(payload: dict, out_path: str) -> tuple:
-    """Write JSON + script to temp files, run node, return (success, message)."""
-    import tempfile
-
-    payload["outputPath"] = out_path
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        data_path   = os.path.join(tmpdir, "data.json")
-        script_path = os.path.join(tmpdir, "generate.js")
-
-        with open(data_path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, default=str)
-
-        with open(script_path, "w", encoding="utf-8") as f:
-            f.write(PPTX_GENERATOR_JS)
-
-        result = subprocess.run(
-            ["node", script_path, data_path],
-            capture_output=True, text=True, timeout=90,
-        )
-
-    if result.returncode == 0 and os.path.exists(out_path):
-        size_kb = os.path.getsize(out_path) // 1024
-        return True, f"Generated {os.path.basename(out_path)} ({size_kb} KB)"
-    err = (result.stderr or result.stdout or "Unknown error")[:400]
-    return False, f"Node error: {err}"
-
-
-# ────────────────────────────────────────────────────────────
-# STREAMLIT UI
-# ────────────────────────────────────────────────────────────
-
-def render_presentation_maker():
-    """Full Presentation Maker tab — call from main() inside a `with tabs[N]:` block."""
-
-    a = st.session_state.get("analytics")
-    if a is None:
-        st.info("Upload or load data first (use the sidebar), then come back here to generate your deck.")
-        return
-
-    # ── Header card ────────────────────────────────────────
-    st.markdown(
-        '<div class="kx-card">'
-        '<div class="kx-card-title">Presentation Maker</div>'
-        '<div class="kx-card-sub">Transform your analysis into a polished, CEO-ready slide deck — '
-        'no PowerPoint experience needed. Customize the story, design, and download in seconds.</div>'
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    # ── SECTION 1: Story ───────────────────────────────────
-    st.markdown(
-        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
-        'color:#4a5568;font-weight:700;margin:1.4rem 0 0.5rem;">1 · Story Focus</div>',
-        unsafe_allow_html=True,
-    )
-
-    # Show the takeaways so the user can decide what to emphasize
-    existing_takeaways = st.session_state.get("takeaways", [])
-    if existing_takeaways:
-        st.markdown(
-            '<div class="kx-callout" style="margin-bottom:0.75rem;">'
-            "<strong>Current story from the data:</strong><br>"
-            + "<br>".join(f"&nbsp;&nbsp;{i+1}. {t}" for i, t in enumerate(existing_takeaways))
-            + "</div>",
-            unsafe_allow_html=True,
-        )
-
-    emphasis = st.text_area(
-        "Angle or message to emphasize  (optional — leave blank to use the AI-detected story)",
-        placeholder=(
-            'e.g. "Focus on the revenue concentration risk in Electronics — '
-            'one category is 60 % of sales and we need a mitigation plan."'
-        ),
-        height=88,
-        key="ppt_emphasis",
-    )
-
-    # ── SECTION 2: Design ──────────────────────────────────
-    st.markdown(
-        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
-        'color:#4a5568;font-weight:700;margin:1.4rem 0 0.5rem;">2 · Design & Style</div>',
-        unsafe_allow_html=True,
-    )
-
-    d1, d2 = st.columns(2)
-    with d1:
-        theme_name = st.selectbox(
-            "Color theme",
-            list(PPTX_THEMES.keys()),
-            index=0,
-            key="ppt_theme",
-            help="KiteIQX Brand matches your analytics dashboard. Other themes suit different audiences.",
-        )
-    with d2:
-        font_name = st.selectbox(
-            "Font pairing",
-            list(PPTX_FONTS.keys()),
-            index=0,
-            key="ppt_font",
-            help="Header font used for titles; body font for narratives and bullets.",
-        )
-
-    theme_cfg = dict(PPTX_THEMES[theme_name])
-
-    if theme_name == "Custom":
-        cc1, cc2, cc3 = st.columns(3)
-        with cc1:
-            p_hex = st.color_picker("Primary color", f"#{theme_cfg['primary']}", key="ppt_cprimary")
-            theme_cfg["primary"] = p_hex.lstrip("#")
-        with cc2:
-            a_hex = st.color_picker("Accent color", f"#{theme_cfg['accent']}", key="ppt_caccent")
-            theme_cfg["accent"] = a_hex.lstrip("#")
-        with cc3:
-            s_hex = st.color_picker("Surface color", f"#{theme_cfg['surface']}", key="ppt_csurface")
-            theme_cfg["surface"] = s_hex.lstrip("#")
-    else:
-        # Colour swatch preview
-        swatches = [
-            ("Primary",    theme_cfg["primary"]),
-            ("Accent",     theme_cfg["accent"]),
-            ("Surface",    theme_cfg["surface"]),
-            ("Text",       theme_cfg["text"]),
-        ]
-        swatch_html = "".join(
-            f'<div title="{lbl}" style="width:30px;height:30px;border-radius:6px;background:#{hex_};'
-            f'border:1px solid #e3e6ee;" ></div>'
-            for lbl, hex_ in swatches
-        )
-        st.markdown(
-            f'<div style="display:flex;gap:0.45rem;align-items:center;margin-bottom:0.5rem;">'
-            f"{swatch_html}"
-            f'<span style="color:#4a5568;font-size:0.82rem;margin-left:0.4rem;">Theme palette preview</span>'
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-    font_cfg = PPTX_FONTS[font_name]
-
-    # Font preview
-    st.markdown(
-        f'<p style="font-family:{font_cfg["header"]};font-size:1.05rem;font-weight:700;'
-        f'color:#1a2333;margin:0 0 0.15rem 0;">Header — {font_cfg["header"]}</p>'
-        f'<p style="font-family:{font_cfg["body"]};font-size:0.9rem;color:#4a5568;margin:0 0 1rem 0;">'
-        f"Body — {font_cfg['body']}</p>",
-        unsafe_allow_html=True,
-    )
-
-    # ── SECTION 3: Custom Template ─────────────────────────
-    st.markdown(
-        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
-        'color:#4a5568;font-weight:700;margin:1.4rem 0 0.5rem;">3 · Custom Template  (optional)</div>',
-        unsafe_allow_html=True,
-    )
-    with st.expander("Upload your branded .pptx template"):
-        st.info(
-            "Drop your company template here. KiteIQX will extract your brand colors and fonts "
-            "and prioritize them over the theme selected above."
-        )
-        tpl_file = st.file_uploader(
-            "Choose a .pptx file", type=["pptx"], key="ppt_template",
-            help="Your slides don't need to contain any content — just the master/theme.",
-        )
-        if tpl_file is not None:
-            try:
-                from pptx import Presentation as _Prs
-                from pptx.util import Pt
-                tpl_bytes = tpl_file.read()
-                prs_obj = _Prs(__import__("io").BytesIO(tpl_bytes))
-                theme_obj = prs_obj.slide_master.theme_color_map
-                # Extract first accent / dk1 colors if available
-                tc = prs_obj.slide_master.slide_layouts[0].background.fill
-                st.success(
-                    f"Template '{tpl_file.name}' loaded — "
-                    f"{len(prs_obj.slide_layouts)} layouts detected. "
-                    "Brand extraction applied where possible."
-                )
-                # Save template for potential future use
-                tpl_save = Path("data/uploads") / f"template_{tpl_file.name}"
-                tpl_save.parent.mkdir(parents=True, exist_ok=True)
-                tpl_save.write_bytes(tpl_bytes)
-                st.session_state["ppt_template_path"] = str(tpl_save)
-            except ImportError:
-                st.warning(
-                    "python-pptx not installed — template colors cannot be extracted automatically. "
-                    "Your theme selection above will be used instead."
-                )
-            except Exception as e:
-                st.warning(f"Could not parse template: {e}. Using selected theme.")
-
-    # ── SECTION 4: Slide outline preview ──────────────────
-    st.markdown(
-        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
-        'color:#4a5568;font-weight:700;margin:1.4rem 0 0.5rem;">4 &middot; What&apos;s in the Deck</div>',
-        unsafe_allow_html=True,
-    )
-
-    chart_data = _collect_chart_data(a)
-    slide_outline = [
-        ("1", "Title",              "Dataset name, subtitle, date"),
-        ("2", "Business Story",     "Executive narrative + KPI sidebar"),
-        ("3", "Key Metrics",        "4 headline KPIs on a dark dashboard slide"),
-    ]
-    if chart_data.get("bar_chart"):
-        slide_outline.append(("4", "Category Analysis",
-                               chart_data["bar_chart"]["title"] + f"  ({len(chart_data['bar_chart']['labels'])} categories)"))
-    else:
-        slide_outline.append(("4", "Category Analysis", "Will generate when categorical data is present"))
-
-    if chart_data.get("line_chart"):
-        slide_outline.append(("5", "Trend Analysis", chart_data["line_chart"]["title"]))
-    elif chart_data.get("pie_chart"):
-        slide_outline.append(("5", "Distribution", chart_data["pie_chart"]["title"] + " — doughnut + share cards"))
-    else:
-        slide_outline.append(("5", "Trend / Distribution", "Will generate when time or secondary categorical data is present"))
-
-    slide_outline += [
-        ("6", "Strategic Takeaways",   "3 numbered decision cards from the AI analysis"),
-        ("7", "Data Quality",          f"Score gauge + quality summary"),
-        ("8", "Recommendations",       "3 actionable next steps from KiteIQX AI"),
-        ("9", "Closing",               "Brand close with key message"),
-    ]
-
-    outline_rows = ""
-    for num, title, sub in slide_outline:
-        outline_rows += (
-            f'<div style="display:flex;gap:0.65rem;align-items:center;'
-            f'padding:0.32rem 0;border-bottom:1px solid #e3e6ee;">'
-            f'<div style="flex:0 0 26px;width:26px;height:26px;border-radius:5px;background:#0a2540;'
-            f'color:#c79a3a;font-size:0.72rem;font-weight:700;display:flex;align-items:center;'
-            f'justify-content:center;">{num}</div>'
-            f'<div><strong style="color:#1a2333;font-size:0.9rem;">{title}</strong> '
-            f'<span style="color:#4a5568;font-size:0.82rem;">— {sub}</span></div></div>'
-        )
-    st.markdown(
-        f'<div class="kx-card" style="padding:0.75rem 1rem;">{outline_rows}</div>',
-        unsafe_allow_html=True,
-    )
-
-    # ── SECTION 5: Generate ────────────────────────────────
-    st.markdown(
-        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
-        'color:#4a5568;font-weight:700;margin:1.4rem 0 0.5rem;">5 · Generate</div>',
-        unsafe_allow_html=True,
-    )
-
-    gen_col, _ = st.columns([2, 5])
-    with gen_col:
-        generate_clicked = st.button(
-            "Generate Presentation",
-            type="primary",
-            key="ppt_generate",
-            use_container_width=True,
-        )
-
-    if generate_clicked:
-        bar = st.progress(0, text="Initialising…")
-
-        bar.progress(8,  text="Checking slide engine…")
-        ok, msg = _ensure_pptxgenjs()
-        if not ok:
-            st.error(f"pptxgenjs unavailable: {msg}")
-            bar.empty()
-            return
-
-        bar.progress(20, text="Extracting data signals…")
-        # (chart data already collected above for the outline)
-
-        bar.progress(38, text="Drafting narrative with KiteIQX AI…")
-        payload = _build_payload(a, emphasis.strip(), theme_cfg, font_cfg)
-
-        bar.progress(60, text="Building slides…")
-        out_dir = Path("data/uploads")
-        out_dir.mkdir(parents=True, exist_ok=True)
-        ts       = datetime.now().strftime("%Y%m%d_%H%M%S")
-        fname    = st.session_state.get("upload_filename", "analysis").replace(".", "_")
-        out_path = str(out_dir / f"KiteIQX_{fname}_{ts}.pptx")
-
-        success, gen_msg = _run_pptx_generator(payload, out_path)
-
-        bar.progress(95, text="Finalising…")
-        time.sleep(0.25)
-        bar.progress(100, text="Done!")
-        bar.empty()
-
-        if success:
-            st.session_state["ppt_out_path"] = out_path
-            st.session_state["ppt_payload"]   = payload
-            st.success(
-                f"Presentation ready  ·  9 slides  ·  "
-                f"{payload['content']['domain']}  ·  "
-                f"{os.path.getsize(out_path) // 1024} KB"
-            )
-        else:
-            st.error(gen_msg)
-
-    # ── Download + summary ─────────────────────────────────
-    if st.session_state.get("ppt_out_path") and os.path.exists(st.session_state["ppt_out_path"]):
-        out_path = st.session_state["ppt_out_path"]
-
-        with open(out_path, "rb") as f:
-            pptx_bytes = f.read()
-
-        st.markdown("---")
-        dl_col, sum_col = st.columns([2, 4])
-
-        with dl_col:
-            st.download_button(
-                label="⬇ Download .pptx",
-                data=pptx_bytes,
-                file_name=os.path.basename(out_path),
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                key="ppt_download",
-                use_container_width=True,
-            )
-
-        with sum_col:
-            p = st.session_state.get("ppt_payload", {})
-            if p:
-                c = p.get("content", {})
-                st.markdown(
-                    f'<div class="kx-card">'
-                    f'<div class="kx-card-title">Deck summary</div>'
-                    f'<div style="font-size:0.98rem;color:#1a2333;">'
-                    f'<strong>{c.get("domain","")}</strong> &nbsp;·&nbsp; 9 slides &nbsp;·&nbsp; {c.get("date","")}</div>'
-                    f'<div style="font-size:0.85rem;color:#4a5568;margin-top:0.2rem;">{c.get("subtitle","")}</div>'
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
-
-        # Regen / new theme notice
-        st.markdown(
-            '<div class="kx-callout" style="margin-top:0.75rem;">'
-            "<strong>Want to tweak the deck?</strong>  Change the theme, font, or story emphasis above "
-            "and click <em>Generate Presentation</em> again — it takes about 5 seconds."
-            "</div>",
-            unsafe_allow_html=True,
-        )
