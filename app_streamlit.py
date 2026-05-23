@@ -3,7 +3,7 @@ KiteIQX Intelligence - Streamlit Analytics Engine
 =================================================
 Refactored to:
   1. Match KiteIQX.com brand (navy + gold, professional consulting feel)
-  2. Accept CSV, XLSX, and XLS files
+  2. Accept CSV, XLSX, and XLS files 
   3. Executive Dashboard rebuilt as a narrative storyboard
   4. AI Intelligence moved to tab 2
   5. Data Quality lives in its own dedicated tab
