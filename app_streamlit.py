@@ -65,9 +65,6 @@ st.set_page_config(
 
 # ============================================================
 # ⚠️  GROQ API KEY  -- TODO: ROTATE THIS AND MOVE TO st.secrets
-# This is the SAME key from your original file. It is exposed in
-# source control - rotate at https://console.groq.com/keys and
-# replace with st.secrets["GROQ_API_KEY"] when you have time.
 # ============================================================
 _HARDCODED_GROQ_KEY = "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"
 
@@ -96,7 +93,6 @@ GSHEETS_SCOPES = [
 
 @st.cache_resource(show_spinner=False)
 def _get_gsheets_client():
-    """Cached Google Sheets client — one connection for the whole session."""
     if not GSHEETS_AVAILABLE:
         return None
     try:
@@ -115,7 +111,6 @@ def _get_session_id() -> str:
 
 
 def log_upload(filename: str, df, summary: str = "", takeaways: list = None):
-    """Log a file upload event to the 'uploads' sheet."""
     try:
         client = _get_gsheets_client()
         if not client:
@@ -143,11 +138,10 @@ def log_upload(filename: str, df, summary: str = "", takeaways: list = None):
             " | ".join(takeaways) if takeaways else "",
         ], value_input_option="USER_ENTERED")
     except Exception:
-        pass  # never crash the app over logging
+        pass
 
 
 def log_ai_query(filename: str, question: str, answer: str):
-    """Log an AI question + answer to the 'ai_queries' sheet."""
     try:
         client = _get_gsheets_client()
         if not client:
@@ -172,22 +166,23 @@ def log_ai_query(filename: str, question: str, answer: str):
 st.markdown(
     """
 <style>
+/* ── CSS CUSTOM PROPERTIES ───────────────────────────────── */
 :root {
-    --kite-navy: #0a2540;
-    --kite-navy-2: #14304f;
-    --kite-gold: #c79a3a;
-    --kite-gold-soft: #e6c878;
-    --kite-text: #1a2333;
-    --kite-text-soft: #4a5568;
-    --kite-surface: #ffffff;
-    --kite-surface-soft: #f7f8fb;
-    --kite-border: #e3e6ee;
-    --kite-success: #15803d;
-    --kite-warning: #b45309;
-    --kite-danger:  #b91c1c;
+    --kite-navy:       #0a2540;
+    --kite-navy-2:     #14304f;
+    --kite-gold:       #c79a3a;
+    --kite-gold-soft:  #e6c878;
+    --kite-text:       #1a2333;
+    --kite-text-soft:  #4a5568;
+    --kite-surface:    #ffffff;
+    --kite-surface-soft:#f7f8fb;
+    --kite-border:     #e3e6ee;
+    --kite-success:    #15803d;
+    --kite-warning:    #b45309;
+    --kite-danger:     #b91c1c;
 }
 
-/* Force light mode globally — prevents phone dark-mode from inverting colours */
+/* ── FORCE LIGHT MODE ────────────────────────────────────── */
 [data-testid="stAppViewContainer"],
 [data-testid="stMain"],
 [data-testid="stMainBlockContainer"],
@@ -196,33 +191,181 @@ st.markdown(
     color: #1a2333 !important;
 }
 
-/* Base */
+/* ── BASE ────────────────────────────────────────────────── */
 html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif !important;
     background-color: #ffffff !important;
+    /* NOTE: intentionally NOT setting a global text color here so
+       we can target specific elements below without fighting Streamlit */
 }
-/* Explicit text color only on block-level containers, NOT bare p/span which bleeds into buttons */
-div.stMarkdown, div.stText { color: #1a2333; }
+
+/* Block-level text containers */
+div.stMarkdown, div.stText,
+div.stMarkdown p, div.stMarkdown li,
+div.stMarkdown h1, div.stMarkdown h2,
+div.stMarkdown h3, div.stMarkdown h4 {
+    color: #1a2333 !important;
+}
 
 .block-container { padding-top: 4.5rem !important; max-width: 1200px; }
 
-/* Keep Streamlit header visible on mobile (hamburger menu lives there) */
-/* Only hide the deploy/share button, keep hamburger for mobile sidebar */
 .stDeployButton { display: none !important; }
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
 
-/* Nudge brand mark down slightly so it clears the top bar */
-.kx-brand {
-    padding-top: 0.25rem;
+/* ── HEADINGS (main area) ───────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+    color: #1a2333 !important;
 }
 
-/* Header / branding */
+/* ── LABELS (every widget) ───────────────────────────────── */
+label,
+.stTextInput label,
+.stTextArea label,
+.stSelectbox label,
+.stMultiSelect label,
+.stSlider label,
+.stRadio label,
+.stCheckbox label,
+.stFileUploader label,
+[data-testid="stWidgetLabel"],
+[data-testid="stWidgetLabel"] p,
+[data-testid="stWidgetLabel"] span {
+    color: #1a2333 !important;
+}
+
+/* ── TEXT INPUTS & TEXTAREAS ─────────────────────────────── */
+.stTextInput input,
+.stTextInput input::placeholder,
+.stTextArea textarea,
+.stTextArea textarea::placeholder {
+    color: #1a2333 !important;
+    background-color: #ffffff !important;
+    border-color: #e3e6ee !important;
+}
+.stTextInput input::placeholder,
+.stTextArea textarea::placeholder {
+    color: #9aa5b4 !important;   /* softer placeholder — readable but clearly secondary */
+}
+
+/* ── SELECTBOX (main area) ───────────────────────────────── */
+.stSelectbox [data-baseweb="select"] *,
+.stSelectbox [data-baseweb="select"] input,
+.stSelectbox [data-baseweb="select"] [data-testid="stMarkdownContainer"] {
+    color: #1a2333 !important;
+    background-color: #ffffff !important;
+}
+/* Selected value pill inside select */
+.stSelectbox [data-baseweb="select"] [data-testid="stMarkdownContainer"] p {
+    color: #1a2333 !important;
+}
+
+/* ── MULTISELECT (main area) ─────────────────────────────── */
+.stMultiSelect [data-baseweb="select"] * {
+    color: #1a2333 !important;
+    background-color: #ffffff !important;
+}
+/* Selected-item chips: navy bg + gold text for brand */
+.stMultiSelect [data-baseweb="tag"] {
+    background-color: #0a2540 !important;
+}
+.stMultiSelect [data-baseweb="tag"] span,
+.stMultiSelect [data-baseweb="tag"] [data-testid="stMarkdownContainer"] p {
+    color: #e6c878 !important;
+}
+
+/* ── BASEWEB DROPDOWN POPOVER (both select & multiselect) ── */
+[data-baseweb="popover"],
+[data-baseweb="popover"] *,
+[data-baseweb="menu"],
+[data-baseweb="menu"] *,
+[data-baseweb="list"],
+[data-baseweb="list"] * {
+    color: #1a2333 !important;
+    background-color: #ffffff !important;
+}
+/* Hover state for dropdown options */
+[data-baseweb="menu"] [role="option"]:hover,
+[data-baseweb="list"] li:hover {
+    background-color: #f7f8fb !important;
+    color: #0a2540 !important;
+}
+
+/* ── RADIO BUTTONS ───────────────────────────────────────── */
+.stRadio > div,
+.stRadio > div label,
+.stRadio > div label p,
+.stRadio > div label span {
+    color: #1a2333 !important;
+}
+
+/* ── CHECKBOXES ──────────────────────────────────────────── */
+.stCheckbox > label,
+.stCheckbox > label p,
+.stCheckbox > label span {
+    color: #1a2333 !important;
+}
+
+/* ── SLIDER ──────────────────────────────────────────────── */
+.stSlider > div,
+.stSlider > div p,
+[data-testid="stSlider"] * {
+    color: #1a2333 !important;
+}
+
+/* ── METRICS ─────────────────────────────────────────────── */
+[data-testid="stMetricLabel"],
+[data-testid="stMetricLabel"] p,
+[data-testid="stMetricValue"],
+[data-testid="stMetricDelta"] {
+    color: #1a2333 !important;
+}
+
+/* ── EXPANDER ────────────────────────────────────────────── */
+details summary,
+details summary p,
+details summary span,
+.streamlit-expanderHeader,
+.streamlit-expanderHeader p {
+    color: #1a2333 !important;
+}
+
+/* ── DATAFRAME / TABLE ───────────────────────────────────── */
+[data-testid="stDataFrame"] *,
+[data-testid="stDataFrame"] td,
+[data-testid="stDataFrame"] th,
+.stDataFrame *,
+iframe {
+    color: #1a2333 !important;
+}
+
+/* ── ALERT BOXES (info / warning / success / error) ─────── */
+[data-testid="stAlert"],
+[data-testid="stAlert"] *,
+[data-testid="stAlert"] p {
+    color: #1a2333 !important;
+}
+
+/* ── FILE UPLOADER ───────────────────────────────────────── */
+[data-testid="stFileUploader"] *,
+[data-testid="stFileUploader"] p,
+[data-testid="stFileUploader"] span,
+[data-testid="stFileUploadDropzone"] * {
+    color: #1a2333 !important;
+}
+
+/* ── SPINNER TEXT ────────────────────────────────────────── */
+[data-testid="stSpinner"] p {
+    color: #1a2333 !important;
+}
+
+/* ── HEADER / BRANDING ───────────────────────────────────── */
 .kx-brand {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     margin-bottom: 0.25rem;
+    padding-top: 0.25rem;
 }
 .kx-mark {
     width: 38px; height: 38px;
@@ -247,7 +390,7 @@ footer { visibility: hidden; }
     padding-bottom: 1rem;
 }
 
-/* Pills / badges */
+/* ── PILLS ───────────────────────────────────────────────── */
 .kx-pill {
     display: inline-block;
     padding: 0.32rem 0.85rem;
@@ -257,22 +400,23 @@ footer { visibility: hidden; }
     letter-spacing: 0.2px;
     margin: 0.15rem 0.3rem 0.15rem 0;
 }
-.kx-pill-navy { background: var(--kite-navy); color: var(--kite-gold-soft); }
-.kx-pill-gold { background: var(--kite-gold); color: #2a1b00; }
-.kx-pill-soft { background: var(--kite-surface-soft); color: var(--kite-text-soft); border: 1px solid var(--kite-border); }
+.kx-pill-navy { background: var(--kite-navy); color: var(--kite-gold-soft) !important; }
+.kx-pill-gold { background: var(--kite-gold); color: #2a1b00 !important; }
+.kx-pill-soft { background: var(--kite-surface-soft); color: var(--kite-text-soft) !important;
+                border: 1px solid var(--kite-border); }
 
-/* Storyboard cards */
+/* ── STORYBOARD CARDS ────────────────────────────────────── */
 .kx-hero {
     background: linear-gradient(135deg, var(--kite-navy) 0%, var(--kite-navy-2) 100%);
-    color: #ffffff;
+    color: #ffffff !important;
     border-radius: 14px;
     padding: 1.75rem 2rem;
     margin: 0.5rem 0 1.25rem 0;
     box-shadow: 0 4px 24px rgba(10, 37, 64, 0.10);
 }
-.kx-hero h2 { color: #ffffff; margin: 0 0 0.4rem 0; font-weight: 700; }
-.kx-hero p  { color: #d8dde6; margin: 0; font-size: 1.05rem; line-height: 1.55; }
-.kx-hero .kx-hero-accent { color: var(--kite-gold); font-weight: 700; }
+.kx-hero h2          { color: #ffffff !important; margin: 0 0 0.4rem 0; font-weight: 700; }
+.kx-hero p           { color: #d8dde6 !important; margin: 0; font-size: 1.05rem; line-height: 1.55; }
+.kx-hero .kx-hero-accent { color: var(--kite-gold) !important; font-weight: 700; }
 
 .kx-card {
     background: #ffffff !important;
@@ -343,13 +487,29 @@ footer { visibility: hidden; }
     line-height: 1.55;
 }
 
-/* Quality status panels */
-.kx-q-excellent { background: #ecfdf3 !important; border: 1px solid #abefc6; padding: 1rem 1.2rem; border-radius: 10px; color: #14532d !important; }
-.kx-q-good      { background: #f0f9ff !important; border: 1px solid #bae0fd; padding: 1rem 1.2rem; border-radius: 10px; color: #0c4a6e !important; }
-.kx-q-warning   { background: #fffaeb !important; border: 1px solid #fcd980; padding: 1rem 1.2rem; border-radius: 10px; color: #78350f !important; }
-.kx-q-poor      { background: #fef2f2 !important; border: 1px solid #fda4a4; padding: 1rem 1.2rem; border-radius: 10px; color: #7f1d1d !important; }
+/* ── QUALITY STATUS PANELS ───────────────────────────────── */
+.kx-q-excellent {
+    background: #ecfdf3 !important; border: 1px solid #abefc6;
+    padding: 1rem 1.2rem; border-radius: 10px; color: #14532d !important;
+}
+.kx-q-good {
+    background: #f0f9ff !important; border: 1px solid #bae0fd;
+    padding: 1rem 1.2rem; border-radius: 10px; color: #0c4a6e !important;
+}
+.kx-q-warning {
+    background: #fffaeb !important; border: 1px solid #fcd980;
+    padding: 1rem 1.2rem; border-radius: 10px; color: #78350f !important;
+}
+.kx-q-poor {
+    background: #fef2f2 !important; border: 1px solid #fda4a4;
+    padding: 1rem 1.2rem; border-radius: 10px; color: #7f1d1d !important;
+}
+/* Headings inside quality panels must also follow the panel text color */
+.kx-q-excellent *, .kx-q-good *, .kx-q-warning *, .kx-q-poor * {
+    color: inherit !important;
+}
 
-/* Tabs */
+/* ── TABS ────────────────────────────────────────────────── */
 .stTabs [data-baseweb="tab-list"] {
     gap: 4px;
     border-bottom: 1px solid var(--kite-border);
@@ -357,32 +517,33 @@ footer { visibility: hidden; }
 .stTabs [data-baseweb="tab"] {
     padding: 0.75rem 1.2rem;
     font-weight: 500;
-    color: var(--kite-text-soft);
+    color: #4a5568 !important;   /* unselected tab — visible but muted */
     border-radius: 8px 8px 0 0;
 }
 .stTabs [aria-selected="true"] {
-    color: var(--kite-navy) !important;
+    color: #0a2540 !important;
     border-bottom: 3px solid var(--kite-gold) !important;
     font-weight: 700;
 }
 
-/* Buttons — nuclear specificity, covers all Streamlit button variants */
+/* ── BUTTONS ─────────────────────────────────────────────── */
 button,
 .stButton > button,
-.stButton > button *,
 [data-testid*="Button"],
-[data-testid*="Button"] *,
 [data-testid*="button"],
-[data-testid*="button"] *,
-div[data-testid="stSidebar"] button,
-div[data-testid="stSidebar"] button *,
-div[data-testid="stSidebar"] button p,
-div[data-testid="stSidebar"] button span {
+div[data-testid="stSidebar"] button {
     background-color: #0a2540 !important;
     color: #ffffff !important;
     border-radius: 8px !important;
     border: none !important;
     font-weight: 600 !important;
+}
+button *,
+.stButton > button *,
+[data-testid*="Button"] *,
+[data-testid*="button"] *,
+div[data-testid="stSidebar"] button * {
+    color: #ffffff !important;
 }
 button:hover,
 .stButton > button:hover,
@@ -391,37 +552,51 @@ button:hover,
     color: #e6c878 !important;
 }
 
-/* Compact dashboard visuals row */
-.kx-dash-row { display: flex; gap: 0.75rem; margin: 0.5rem 0; }
-.kx-dash-panel {
-    flex: 1; background: #ffffff !important; border: 1px solid #e3e6ee;
-    border-radius: 10px; padding: 0.5rem; min-width: 0;
-}
-
-/* Sidebar */
+/* ── SIDEBAR ─────────────────────────────────────────────── */
 section[data-testid="stSidebar"] {
     background: #f7f8fb !important;
     border-right: 1px solid #e3e6ee;
 }
-/* Only target text nodes, not interactive widgets */
 section[data-testid="stSidebar"] h1,
 section[data-testid="stSidebar"] h2,
 section[data-testid="stSidebar"] h3,
 section[data-testid="stSidebar"] label,
 section[data-testid="stSidebar"] p,
 section[data-testid="stSidebar"] span:not([class*="st-"]),
-section[data-testid="stSidebar"] .stMarkdown {
+section[data-testid="stSidebar"] .stMarkdown,
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+section[data-testid="stSidebar"] [data-testid="stMetricLabel"] p,
+section[data-testid="stSidebar"] [data-testid="stMetricValue"] {
     color: #1a2333 !important;
 }
-/* Selectbox / dropdown text must be readable */
-section[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] * {
+/* Sidebar selectbox */
+section[data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] *,
+section[data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] input {
     color: #1a2333 !important;
     background-color: #ffffff !important;
 }
-/* Text input */
+/* Sidebar text input */
 section[data-testid="stSidebar"] input {
     color: #1a2333 !important;
     background-color: #ffffff !important;
+}
+/* Sidebar file uploader text */
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] *,
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] p {
+    color: #1a2333 !important;
+}
+
+/* ── CODE BLOCK (st.code) ────────────────────────────────── */
+.stCode, .stCode * {
+    color: #1a2333 !important;
+    background-color: #f7f8fb !important;
+}
+
+/* ── COMPACT DASHBOARD PANELS ────────────────────────────── */
+.kx-dash-row { display: flex; gap: 0.75rem; margin: 0.5rem 0; }
+.kx-dash-panel {
+    flex: 1; background: #ffffff !important; border: 1px solid #e3e6ee;
+    border-radius: 10px; padding: 0.5rem; min-width: 0;
 }
 </style>
 """,
@@ -439,7 +614,6 @@ KITE_PLOTLY = dict(
 
 
 def kx_apply_theme(fig: go.Figure) -> go.Figure:
-    """Apply consistent KiteIQX styling to any Plotly figure."""
     fig.update_layout(**KITE_PLOTLY)
     return fig
 
@@ -495,7 +669,6 @@ class UniversalAnalytics:
         self.categorical_cols = self.df.select_dtypes(include=["object", "category"]).columns.tolist()
         self.datetime_cols = []
 
-        # Attempt datetime parsing on plausibly-named columns
         for col in list(self.df.columns):
             if any(k in col.lower() for k in ("date", "time", "created", "updated", "timestamp")):
                 try:
@@ -625,8 +798,6 @@ class UniversalAnalytics:
                 "min": float(self.df[mc].min()),
             }
 
-    # ---- AI helpers ----
-
     def _data_brief(self, max_rows: int = 5) -> str:
         return (
             f"Rows: {len(self.df):,}\n"
@@ -644,17 +815,14 @@ class UniversalAnalytics:
             return "AI is not configured. Add GROQ_API_KEY to .streamlit/secrets.toml."
         prompt = f"DATASET CONTEXT\n{self._data_brief()}\n\nUSER QUESTION\n{query}\n\nAnswer with specific numbers and concrete recommendations."
         answer = self.llm.predict(prompt)
-        # Log question + answer to Google Sheets
         filename = st.session_state.get("last_saved_path", "unknown")
         log_ai_query(filename, query, answer)
         return answer
 
     def ai_executive_summary(self) -> str:
-        """Generate the storyboard narrative for the Executive Dashboard."""
         if not self.llm:
             return self._fallback_summary()
 
-        # Build a richer context including top value counts for categoricals
         cat_context = ""
         for c in self.categorical_cols[:3]:
             vc = self.df[c].value_counts().head(5)
@@ -751,7 +919,8 @@ class VizEngine:
         try:
             corr = self.df[x].corr(self.df[y])
             fig.add_annotation(text=f"r = {corr:.3f}", xref="paper", yref="paper", x=0.02, y=0.98,
-                               showarrow=False, bgcolor="rgba(255,255,255,0.9)", bordercolor="#0a2540")
+                               showarrow=False, bgcolor="rgba(255,255,255,0.9)", bordercolor="#0a2540",
+                               font=dict(color="#1a2333"))
         except Exception:
             corr = float("nan")
         return kx_apply_theme(fig), f"Correlation {corr:.3f}" if corr == corr else "Scatter created"
@@ -877,15 +1046,13 @@ def generate_demo(kind: str) -> pd.DataFrame:
 
 
 # ============================================================
-# FILE LOADING (CSV + XLSX + save to disk)
+# FILE LOADING
 # ============================================================
 
 def load_uploaded_file(uploaded_file) -> pd.DataFrame:
-    """Load CSV/XLSX/XLS from an uploaded file and persist to data/uploads/."""
     name = uploaded_file.name
     ext = name.lower().rsplit(".", 1)[-1] if "." in name else ""
 
-    # Save a copy for archival before reading (rewind after)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     saved = UPLOAD_DIR / f"{ts}_{name}"
     raw = uploaded_file.getbuffer()
@@ -893,14 +1060,12 @@ def load_uploaded_file(uploaded_file) -> pd.DataFrame:
         f.write(raw)
     st.session_state["last_saved_path"] = str(saved)
 
-    # Read into pandas
     buf = io.BytesIO(raw)
     if ext in ("xlsx", "xls"):
         df = pd.read_excel(buf)
     elif ext == "csv":
         df = pd.read_csv(buf)
     else:
-        # Best-effort: try CSV first, then Excel
         try:
             df = pd.read_csv(io.BytesIO(raw))
         except Exception:
@@ -963,7 +1128,6 @@ def render_dashboard():
     a: UniversalAnalytics = st.session_state.analytics
     ins = a.insights
 
-    # --- HERO BAND ---
     record_str = f"{ins['basic_stats']['rows']:,}"
     col_str = f"{ins['basic_stats']['columns']}"
     quality_pct = 100 - ins["basic_stats"]["missing_pct"]
@@ -987,7 +1151,6 @@ def render_dashboard():
         unsafe_allow_html=True,
     )
 
-    # --- HERO KPI CARDS ---
     cards = st.columns(4)
     cards[0].markdown(
         f"""<div class="kx-card"><div class="kx-card-title">Records analyzed</div>
@@ -1012,7 +1175,6 @@ def render_dashboard():
         <div class="kx-card-value">{quality_pct:.1f}%</div>
         <div class="kx-card-sub">Higher is better; details in Data Quality tab</div></div>""", unsafe_allow_html=True)
 
-    # --- NARRATIVE: DATA STORY ---
     st.markdown(" ")
     st.markdown(
         '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
@@ -1035,7 +1197,6 @@ def render_dashboard():
         st.session_state.pop("takeaways", None)
         st.rerun()
 
-    # --- TOP 3 TAKEAWAYS ---
     st.markdown(" ")
     st.markdown(
         '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
@@ -1046,7 +1207,6 @@ def render_dashboard():
         with st.spinner("Identifying the headline insights..."):
             st.session_state.takeaways = a.ai_top_takeaways()
 
-    # Log summary + takeaways to Google Sheets once per upload session
     if not st.session_state.get("upload_logged") and st.session_state.get("upload_filename"):
         log_upload(
             st.session_state.upload_filename,
@@ -1061,7 +1221,6 @@ def render_dashboard():
             f"""<div class="kx-takeaway"><div class="kx-takeaway-num">{i}</div>
             <div class="kx-takeaway-body">{t}</div></div>""", unsafe_allow_html=True)
 
-    # --- SUPPORTING VISUALS DASHBOARD ---
     st.markdown(" ")
     st.markdown(
         '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
@@ -1081,7 +1240,6 @@ def render_dashboard():
 
     vis_cols = st.columns(3)
 
-    # Panel 1 — top categorical bar
     with vis_cols[0]:
         if a.categorical_cols:
             cat = a.categorical_cols[0]
@@ -1099,7 +1257,6 @@ def render_dashboard():
             fig1.update_layout(**COMPACT)
             st.plotly_chart(fig1, use_container_width=True)
 
-    # Panel 2 — time trend or scatter
     with vis_cols[1]:
         if a.datetime_cols and a.numeric_cols:
             dc = a.datetime_cols[0]
@@ -1116,7 +1273,6 @@ def render_dashboard():
             fig2.update_layout(**COMPACT)
             st.plotly_chart(fig2, use_container_width=True)
 
-    # Panel 3 — second categorical breakdown or numeric distribution
     with vis_cols[2]:
         if len(a.categorical_cols) >= 2:
             cat2 = a.categorical_cols[1]
@@ -1135,7 +1291,6 @@ def render_dashboard():
             fig3.update_layout(**COMPACT)
             st.plotly_chart(fig3, use_container_width=True)
 
-    # Row 2 — numeric heatmap or box-plots if data allows
     if len(a.numeric_cols) >= 3 and len(a.categorical_cols) >= 1:
         vis_cols2 = st.columns(2)
         with vis_cols2[0]:
@@ -1158,7 +1313,6 @@ def render_dashboard():
             fig5.update_layout(**{**COMPACT, "height": 220})
             st.plotly_chart(fig5, use_container_width=True)
 
-    # --- WHAT TO DO NEXT ---
     st.markdown(
         """
         <div class="kx-callout">
@@ -1246,7 +1400,6 @@ def render_data_quality():
     st.markdown(" ")
     cols = st.columns(3)
 
-    # Duplicates
     with cols[0]:
         st.markdown('<div class="kx-card"><div class="kx-card-title">Duplicates</div>', unsafe_allow_html=True)
         if "duplicates" in a.data_quality_issues:
@@ -1264,7 +1417,6 @@ def render_data_quality():
             st.markdown('<div class="kx-card-value">0</div><div class="kx-card-sub">No duplicate rows detected.</div></div>',
                         unsafe_allow_html=True)
 
-    # Missing data
     with cols[1]:
         st.markdown('<div class="kx-card"><div class="kx-card-title">Missing values</div>', unsafe_allow_html=True)
         if "missing_data" in a.data_quality_issues:
@@ -1279,7 +1431,6 @@ def render_data_quality():
             st.markdown('<div class="kx-card-value">0</div><div class="kx-card-sub">All columns are 100% populated.</div></div>',
                         unsafe_allow_html=True)
 
-    # Outliers
     with cols[2]:
         st.markdown('<div class="kx-card"><div class="kx-card-title">Outliers</div>', unsafe_allow_html=True)
         if "outliers" in a.data_quality_issues:
@@ -1294,7 +1445,6 @@ def render_data_quality():
             st.markdown('<div class="kx-card-value">0</div><div class="kx-card-sub">No statistical outliers (IQR method).</div></div>',
                         unsafe_allow_html=True)
 
-    # Detailed tables
     st.markdown(" ")
     if "missing_data" in a.data_quality_issues:
         st.markdown("#### Missing data — column-by-column")
@@ -1469,28 +1619,32 @@ def initialize_analytics(df: pd.DataFrame, model: str, filename: str = "unknown"
     st.session_state.analytics = UniversalAnalytics(df, llm)
     st.session_state.viz_engine = VizEngine(st.session_state.analytics)
     st.session_state.upload_filename = filename
-    # Reset story cache so dashboard re-runs against new data
     st.session_state.pop("exec_summary", None)
     st.session_state.pop("takeaways", None)
     st.session_state.pop("ai_last_response", None)
     st.session_state.pop("upload_logged", None)
-    # Log basic upload info immediately (summary/takeaways logged later once generated)
     log_upload(filename, df)
 
 
 def main():
     render_header()
 
-    # Late-injected button fix — this runs after Streamlit's own CSS so it wins
+    # ── Late-injected button text fix (runs after Streamlit's own CSS) ──────
+    # Kept minimal — comprehensive widget colours are already in the <style>
+    # block above. This just reinforces white button text one final time.
     st.markdown(
         """
         <style>
-        button { color: #ffffff !important; }
-        button p, button span, button div { color: #ffffff !important; }
-        .stButton > button { background-color: #0a2540 !important; color: #ffffff !important; }
-        .stButton > button p,
-        .stButton > button span { color: #ffffff !important; }
-        .stFileUploader button { background-color: #0a2540 !important; color: #ffffff !important; }
+        button, .stButton > button,
+        .stFileUploader button,
+        [data-testid*="Button"] {
+            background-color: #0a2540 !important;
+            color: #ffffff !important;
+        }
+        button p, button span, button div,
+        .stButton > button p, .stButton > button span {
+            color: #ffffff !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -1552,7 +1706,6 @@ def main():
                 except Exception as e:
                     st.error(f"Demo failed: {e}")
 
-        # Show last saved path
         if st.session_state.get("last_saved_path"):
             st.markdown("---")
             st.markdown("**Last uploaded file archived to:**")
