@@ -225,7 +225,7 @@ footer { visibility: hidden; }
     margin-bottom: 0.25rem;
 }
 .kx-mark {
-    width: 38px; height: 38px;
+    width: 38px; height: 48px;
     background: var(--kite-navy);
     color: var(--kite-gold);
     border-radius: 8px;
