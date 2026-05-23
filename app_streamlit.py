@@ -438,11 +438,14 @@ iframe {
     box-shadow: 0 4px 24px rgba(10, 37, 64, 0.10);
 }
 /* Force all direct children of kx-hero to white/light —
-   beats any global heading/paragraph rule above */
+   beats any global heading/paragraph rule above.
+   Also covers Streamlit's stMarkdownContainer wrapper inside unsafe_allow_html. */
 .kx-hero h2, .kx-hero h2 *    { color: #ffffff !important; font-weight: 700; margin: 0 0 0.4rem 0; }
 .kx-hero p,  .kx-hero p *     { color: #d8dde6 !important; margin: 0; font-size: 1.05rem; line-height: 1.55; }
-.kx-hero .kx-hero-accent,
-.kx-hero .kx-hero-accent *    { color: var(--kite-gold) !important; font-weight: 700; }
+/* Re-assert accent spans AFTER the p * rule so gold wins */
+.kx-hero .kx-hero-accent       { color: #c79a3a !important; font-weight: 700; }
+/* Streamlit sometimes adds a div wrapper inside unsafe_allow_html */
+.kx-hero > div, .kx-hero > div * { color: #d8dde6 !important; }
 
 .kx-card {
     background: #ffffff !important;
@@ -1688,14 +1691,6 @@ def main():
             st.warning("No GROQ_API_KEY configured. AI features will be disabled.")
         else:
             st.success("AI engine ready.")
-        st.markdown(
-            f'<div style="font-size:0.78rem;color:#4a5568;background:#f7f8fb;'
-            f'border:1px solid #e3e6ee;border-radius:6px;padding:0.35rem 0.7rem;'
-            f'margin-top:0.3rem;margin-bottom:0.1rem;">'
-            f'⚡ Model: <strong style="color:#0a2540;">llama-3.1-8b-instant</strong></div>',
-            unsafe_allow_html=True,
-        )
-
         model = FIXED_MODEL
 
         st.markdown("---")
