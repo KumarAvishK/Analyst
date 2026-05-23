@@ -213,8 +213,16 @@ div.stMarkdown h3, div.stMarkdown h4 {
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
 
-/* ── HEADINGS (main area) ───────────────────────────────── */
-h1, h2, h3, h4, h5, h6 {
+/* ── HEADINGS — only inside Streamlit markdown, NOT raw HTML ─
+   Raw h2/h3 inside .kx-hero and other custom HTML blocks must
+   keep their own colour (white on dark bg). Scoping to
+   .stMarkdown avoids clobbering those. ──────────────────── */
+.stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
+.stMarkdown h4, .stMarkdown h5, .stMarkdown h6,
+[data-testid="stMarkdownContainer"] h1,
+[data-testid="stMarkdownContainer"] h2,
+[data-testid="stMarkdownContainer"] h3,
+[data-testid="stMarkdownContainer"] h4 {
     color: #1a2333 !important;
 }
 
@@ -353,6 +361,21 @@ iframe {
 [data-testid="stFileUploadDropzone"] * {
     color: #1a2333 !important;
 }
+/* "Browse files" button inside uploader must have white text */
+[data-testid="stFileUploader"] button,
+[data-testid="stFileUploader"] button *,
+[data-testid="stFileUploadDropzone"] button,
+[data-testid="stFileUploadDropzone"] button * {
+    color: #ffffff !important;
+    background-color: #0a2540 !important;
+}
+
+/* ── STREAMLIT TOOLBAR (top-right share/star/edit icons) ─── */
+[data-testid="stToolbar"],
+[data-testid="stDecoration"],
+[data-testid="stStatusWidget"] {
+    display: none !important;
+}
 
 /* ── SPINNER TEXT ────────────────────────────────────────── */
 [data-testid="stSpinner"] p {
@@ -414,9 +437,12 @@ iframe {
     margin: 0.5rem 0 1.25rem 0;
     box-shadow: 0 4px 24px rgba(10, 37, 64, 0.10);
 }
-.kx-hero h2          { color: #ffffff !important; margin: 0 0 0.4rem 0; font-weight: 700; }
-.kx-hero p           { color: #d8dde6 !important; margin: 0; font-size: 1.05rem; line-height: 1.55; }
-.kx-hero .kx-hero-accent { color: var(--kite-gold) !important; font-weight: 700; }
+/* Force all direct children of kx-hero to white/light —
+   beats any global heading/paragraph rule above */
+.kx-hero h2, .kx-hero h2 *    { color: #ffffff !important; font-weight: 700; margin: 0 0 0.4rem 0; }
+.kx-hero p,  .kx-hero p *     { color: #d8dde6 !important; margin: 0; font-size: 1.05rem; line-height: 1.55; }
+.kx-hero .kx-hero-accent,
+.kx-hero .kx-hero-accent *    { color: var(--kite-gold) !important; font-weight: 700; }
 
 .kx-card {
     background: #ffffff !important;
