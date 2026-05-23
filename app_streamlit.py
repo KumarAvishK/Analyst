@@ -437,15 +437,12 @@ iframe {
     margin: 0.5rem 0 1.25rem 0;
     box-shadow: 0 4px 24px rgba(10, 37, 64, 0.10);
 }
-/* Force all direct children of kx-hero to white/light —
-   beats any global heading/paragraph rule above.
-   Also covers Streamlit's stMarkdownContainer wrapper inside unsafe_allow_html. */
+/* Everything inside the hero is white by default */
+.kx-hero *                     { color: #ffffff !important; }
 .kx-hero h2, .kx-hero h2 *    { color: #ffffff !important; font-weight: 700; margin: 0 0 0.4rem 0; }
-.kx-hero p,  .kx-hero p *     { color: #d8dde6 !important; margin: 0; font-size: 1.05rem; line-height: 1.55; }
-/* Re-assert accent spans AFTER the p * rule so gold wins */
+.kx-hero p,  .kx-hero p *     { color: #ffffff !important; margin: 0; font-size: 1.05rem; line-height: 1.55; }
+/* Gold accent spans — declared LAST so they win over the * rule */
 .kx-hero .kx-hero-accent       { color: #c79a3a !important; font-weight: 700; }
-/* Streamlit sometimes adds a div wrapper inside unsafe_allow_html */
-.kx-hero > div, .kx-hero > div * { color: #d8dde6 !important; }
 
 .kx-card {
     background: #ffffff !important;
@@ -546,13 +543,18 @@ iframe {
 .stTabs [data-baseweb="tab"] {
     padding: 0.75rem 1.2rem;
     font-weight: 500;
-    color: #4a5568 !important;   /* unselected tab — visible but muted */
+    color: #4a5568 !important;
     border-radius: 8px 8px 0 0;
 }
 .stTabs [aria-selected="true"] {
     color: #0a2540 !important;
     border-bottom: 3px solid var(--kite-gold) !important;
     font-weight: 700;
+}
+/* ── Hide "Advanced Analytics" tab button (4th tab) ─────── */
+/* Code is preserved — only the UI button is hidden          */
+.stTabs [data-baseweb="tab-list"] button:nth-child(4) {
+    display: none !important;
 }
 
 /* ── BUTTONS ─────────────────────────────────────────────── */
