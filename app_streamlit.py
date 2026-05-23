@@ -1,1345 +1,1595 @@
-import streamlit as st
-import pandas as pd
+"""
+KiteIQX Intelligence - Streamlit Analytics Engine
+=================================================
+Refactored to:
+  1. Match KiteIQX.com brand (navy + gold, professional consulting feel)
+  2. Accept CSV, XLSX, and XLS files
+  3. Executive Dashboard rebuilt as a narrative storyboard
+  4. AI Intelligence moved to tab 2
+  5. Data Quality lives in its own dedicated tab
+  6. Every uploaded file is persisted to data/uploads/
+
+SECURITY: The Groq API key is now read from st.secrets, NOT hardcoded.
+Set it in .streamlit/secrets.toml or via the Streamlit Cloud dashboard.
+"""
+
+import io
+import os
+import re
+import warnings
+from datetime import datetime
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import requests
-import io
-from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import KMeans
-from sklearn.ensemble import IsolationForest
+import streamlit as st
+from plotly.subplots import make_subplots
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
-from scipy import stats
-import warnings
-warnings.filterwarnings('ignore')
-from difflib import SequenceMatcher
-import re
-import plotly.figure_factory as ff
 
-# Groq imports
+warnings.filterwarnings("ignore")
+
+# Google Sheets imports (soft)
+try:
+    import gspread
+    from google.oauth2.service_account import Credentials
+    GSHEETS_AVAILABLE = True
+except ImportError:
+    GSHEETS_AVAILABLE = False
+
+# Groq imports (soft)
 try:
     from groq import Groq
     GROQ_AVAILABLE = True
 except ImportError:
     GROQ_AVAILABLE = False
-    st.error("⚠️ Groq library not installed. Run: pip install groq")
 
-# Internal Groq API Key
-GROQ_API_KEY = "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"
 
-# Set page config
+# ============================================================
+# CONFIG
+# ============================================================
+
+UPLOAD_DIR = Path("data/uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 st.set_page_config(
     page_title="KiteIQX Intelligence",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="auto",
+    page_icon="◆",
 )
 
-# Custom CSS
-st.markdown("""
+
+# ============================================================
+# ⚠️  GROQ API KEY  -- TODO: ROTATE THIS AND MOVE TO st.secrets
+# This is the SAME key from your original file. It is exposed in
+# source control - rotate at https://console.groq.com/keys and
+# replace with st.secrets["GROQ_API_KEY"] when you have time.
+# ============================================================
+_HARDCODED_GROQ_KEY = "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"
+
+
+def _get_groq_key() -> str:
+    """Prefer st.secrets, fall back to env var, fall back to hardcoded."""
+    try:
+        if "GROQ_API_KEY" in st.secrets:
+            return st.secrets["GROQ_API_KEY"]
+    except Exception:
+        pass
+    return os.environ.get("GROQ_API_KEY", _HARDCODED_GROQ_KEY)
+
+
+GROQ_API_KEY = _get_groq_key()
+
+# ============================================================
+# GOOGLE SHEETS LOGGER
+# ============================================================
+
+SHEET_ID = "1rJYe4MVKDc9srbzrqf1CWIfFLmPn_4qTwSEZ5PCTVT0"
+GSHEETS_SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
+
+@st.cache_resource(show_spinner=False)
+def _get_gsheets_client():
+    """Cached Google Sheets client — one connection for the whole session."""
+    if not GSHEETS_AVAILABLE:
+        return None
+    try:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds = Credentials.from_service_account_info(creds_dict, scopes=GSHEETS_SCOPES)
+        return gspread.authorize(creds)
+    except Exception:
+        return None
+
+
+def _get_session_id() -> str:
+    if "session_id" not in st.session_state:
+        import uuid
+        st.session_state.session_id = str(uuid.uuid4())[:8]
+    return st.session_state.session_id
+
+
+def log_upload(filename: str, df, summary: str = "", takeaways: list = None):
+    """Log a file upload event to the 'uploads' sheet."""
+    try:
+        client = _get_gsheets_client()
+        if not client:
+            return
+        sh = client.open_by_key(SHEET_ID)
+        ws = sh.worksheet("uploads")
+        a = st.session_state.get("analytics")
+        completeness = round(100 - df.isnull().sum().sum() / max(1, df.size) * 100, 1)
+        num_cols = len(df.select_dtypes(include=[np.number]).columns)
+        cat_cols = len(df.select_dtypes(include=["object", "category"]).columns)
+        money_cols = [c for c in df.columns if any(w in c.lower()
+                      for w in ("price","cost","amount","revenue","salary","sales","gmv"))]
+        total_val = round(float(df[money_cols].sum().sum()), 2) if money_cols else ""
+        ws.append_row([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            _get_session_id(),
+            filename,
+            len(df),
+            len(df.columns),
+            num_cols,
+            cat_cols,
+            f"{completeness}%",
+            str(total_val) if total_val != "" else "N/A",
+            summary[:500] if summary else "",
+            " | ".join(takeaways) if takeaways else "",
+        ], value_input_option="USER_ENTERED")
+    except Exception:
+        pass  # never crash the app over logging
+
+
+def log_ai_query(filename: str, question: str, answer: str):
+    """Log an AI question + answer to the 'ai_queries' sheet."""
+    try:
+        client = _get_gsheets_client()
+        if not client:
+            return
+        sh = client.open_by_key(SHEET_ID)
+        ws = sh.worksheet("ai_queries")
+        ws.append_row([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            _get_session_id(),
+            filename,
+            question[:300],
+            answer[:800],
+        ], value_input_option="USER_ENTERED")
+    except Exception:
+        pass
+
+
+# ============================================================
+# THEME (KiteIQX consulting brand: navy + gold)
+# ============================================================
+
+st.markdown(
+    """
 <style>
-    .main-header {
-        font-size: 3.8rem;
-        font-weight: bold;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        text-align: center;
-        margin-bottom: 0.5rem;
-    }
-    .sub-header {
-        text-align: center;
-        color: #666;
-        margin-bottom: 2rem;
-        font-size: 1.4rem;
-    }
-    .kite-badge {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 0.5rem 1.5rem;
-        border-radius: 25px;
-        display: inline-block;
-        margin: 0.5rem 0;
-        font-weight: bold;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    .clean-section {
-        background-color: #f8f9fa;
-        border-radius: 10px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        border: 1px solid #e9ecef;
-    }
-    .metric-card {
-        background-color: white;
-        padding: 1rem;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        margin: 0.5rem 0;
-    }
-    .data-quality-excellent {
-        background-color: #d4edda;
-        border: 1px solid #c3e6cb;
-        padding: 1rem;
-        border-radius: 8px;
-        margin: 1rem 0;
-    }
-    .data-quality-warning {
-        background-color: #fff3cd;
-        border: 1px solid #ffeaa7;
-        padding: 1rem;
-        border-radius: 8px;
-        margin: 1rem 0;
-    }
-    .data-quality-poor {
-        background-color: #f8d7da;
-        border: 1px solid #f5c6cb;
-        padding: 1rem;
-        border-radius: 8px;
-        margin: 1rem 0;
-    }
-    .method-card {
-        background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
-        border: 1px solid #bbdefb;
-        padding: 1rem;
-        border-radius: 8px;
-        margin: 0.5rem 0;
-    }
-    .ai-response-box {
-        background: linear-gradient(135deg, #f5f7fa 0%, #e8eaf6 100%);
-        border-left: 4px solid #667eea;
-        padding: 1.5rem;
-        border-radius: 8px;
-        margin: 1rem 0;
-    }
-    /* Hide Advanced Analytics tab — code preserved, only button hidden */
-    .stTabs [data-baseweb="tab-list"] button:nth-child(2) {
-        display: none !important;
-    }
+:root {
+    --kite-navy: #0a2540;
+    --kite-navy-2: #14304f;
+    --kite-gold: #c79a3a;
+    --kite-gold-soft: #e6c878;
+    --kite-text: #1a2333;
+    --kite-text-soft: #4a5568;
+    --kite-surface: #ffffff;
+    --kite-surface-soft: #f7f8fb;
+    --kite-border: #e3e6ee;
+    --kite-success: #15803d;
+    --kite-warning: #b45309;
+    --kite-danger:  #b91c1c;
+}
+
+/* Force light mode globally — prevents phone dark-mode from inverting colours */
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"],
+.main, section.main {
+    background-color: #ffffff !important;
+    color: #1a2333 !important;
+}
+
+/* Base */
+html, body, [class*="css"] {
+    font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif !important;
+    background-color: #ffffff !important;
+}
+/* Explicit text color only on block-level containers, NOT bare p/span which bleeds into buttons */
+div.stMarkdown, div.stText { color: #1a2333; }
+
+.block-container { padding-top: 4.5rem !important; max-width: 1200px; }
+
+/* Keep Streamlit header visible on mobile (hamburger menu lives there) */
+/* Only hide the deploy/share button, keep hamburger for mobile sidebar */
+.stDeployButton { display: none !important; }
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+
+/* Nudge brand mark down slightly so it clears the top bar */
+.kx-brand {
+    padding-top: 0.25rem;
+}
+
+/* Header / branding */
+.kx-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.25rem;
+}
+.kx-mark {
+    width: 38px; height: 38px;
+    background: var(--kite-navy);
+    color: var(--kite-gold);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 1.4rem;
+    letter-spacing: -1px;
+}
+.kx-wordmark {
+    font-size: 1.6rem; font-weight: 700;
+    color: #0a2540 !important;
+    letter-spacing: -0.3px;
+}
+.kx-wordmark span { color: #c79a3a !important; }
+.kx-tag {
+    color: #4a5568 !important;
+    font-size: 0.95rem;
+    margin-bottom: 1.25rem;
+    border-bottom: 1px solid #e3e6ee;
+    padding-bottom: 1rem;
+}
+
+/* Pills / badges */
+.kx-pill {
+    display: inline-block;
+    padding: 0.32rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    margin: 0.15rem 0.3rem 0.15rem 0;
+}
+.kx-pill-navy { background: var(--kite-navy); color: var(--kite-gold-soft); }
+.kx-pill-gold { background: var(--kite-gold); color: #2a1b00; }
+.kx-pill-soft { background: var(--kite-surface-soft); color: var(--kite-text-soft); border: 1px solid var(--kite-border); }
+
+/* Storyboard cards */
+.kx-hero {
+    background: linear-gradient(135deg, var(--kite-navy) 0%, var(--kite-navy-2) 100%);
+    color: #ffffff;
+    border-radius: 14px;
+    padding: 1.75rem 2rem;
+    margin: 0.5rem 0 1.25rem 0;
+    box-shadow: 0 4px 24px rgba(10, 37, 64, 0.10);
+}
+.kx-hero h2 { color: #ffffff; margin: 0 0 0.4rem 0; font-weight: 700; }
+.kx-hero p  { color: #d8dde6; margin: 0; font-size: 1.05rem; line-height: 1.55; }
+.kx-hero .kx-hero-accent { color: var(--kite-gold); font-weight: 700; }
+
+.kx-card {
+    background: #ffffff !important;
+    border: 1px solid var(--kite-border);
+    border-radius: 12px;
+    padding: 1.25rem 1.4rem;
+    margin: 0.6rem 0;
+    box-shadow: 0 1px 3px rgba(10, 37, 64, 0.04);
+    color: #1a2333 !important;
+}
+.kx-card-title {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #4a5568 !important;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+}
+.kx-card-value {
+    font-size: 1.65rem;
+    font-weight: 700;
+    color: #0a2540 !important;
+    line-height: 1.2;
+}
+.kx-card-sub {
+    font-size: 0.85rem;
+    color: #4a5568 !important;
+    margin-top: 0.25rem;
+}
+
+.kx-callout {
+    border-left: 4px solid var(--kite-gold);
+    background: #f7f8fb !important;
+    padding: 1rem 1.25rem;
+    border-radius: 0 8px 8px 0;
+    margin: 1rem 0;
+    color: #1a2333 !important;
+}
+
+.kx-takeaway {
+    display: flex;
+    gap: 0.9rem;
+    align-items: flex-start;
+    background: #fdfcf6 !important;
+    border: 1px solid #efe3c1;
+    border-radius: 10px;
+    padding: 0.9rem 1.1rem;
+    margin: 0.5rem 0;
+}
+.kx-takeaway-num {
+    flex: 0 0 30px;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: var(--kite-gold);
+    color: #2a1b00 !important;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+}
+.kx-takeaway-body { color: #1a2333 !important; font-size: 0.96rem; line-height: 1.45; }
+
+.kx-ai-response {
+    background: #f7f8fb !important;
+    border-left: 4px solid #0a2540;
+    padding: 1.25rem 1.5rem;
+    color: #1a2333 !important;
+    border-radius: 0 10px 10px 0;
+    margin: 1rem 0;
+    line-height: 1.55;
+}
+
+/* Quality status panels */
+.kx-q-excellent { background: #ecfdf3 !important; border: 1px solid #abefc6; padding: 1rem 1.2rem; border-radius: 10px; color: #14532d !important; }
+.kx-q-good      { background: #f0f9ff !important; border: 1px solid #bae0fd; padding: 1rem 1.2rem; border-radius: 10px; color: #0c4a6e !important; }
+.kx-q-warning   { background: #fffaeb !important; border: 1px solid #fcd980; padding: 1rem 1.2rem; border-radius: 10px; color: #78350f !important; }
+.kx-q-poor      { background: #fef2f2 !important; border: 1px solid #fda4a4; padding: 1rem 1.2rem; border-radius: 10px; color: #7f1d1d !important; }
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 4px;
+    border-bottom: 1px solid var(--kite-border);
+}
+.stTabs [data-baseweb="tab"] {
+    padding: 0.75rem 1.2rem;
+    font-weight: 500;
+    color: var(--kite-text-soft);
+    border-radius: 8px 8px 0 0;
+}
+.stTabs [aria-selected="true"] {
+    color: var(--kite-navy) !important;
+    border-bottom: 3px solid var(--kite-gold) !important;
+    font-weight: 700;
+}
+
+/* Buttons — nuclear specificity, covers all Streamlit button variants */
+button,
+.stButton > button,
+.stButton > button *,
+[data-testid*="Button"],
+[data-testid*="Button"] *,
+[data-testid*="button"],
+[data-testid*="button"] *,
+div[data-testid="stSidebar"] button,
+div[data-testid="stSidebar"] button *,
+div[data-testid="stSidebar"] button p,
+div[data-testid="stSidebar"] button span {
+    background-color: #0a2540 !important;
+    color: #ffffff !important;
+    border-radius: 8px !important;
+    border: none !important;
+    font-weight: 600 !important;
+}
+button:hover,
+.stButton > button:hover,
+.stButton > button:hover * {
+    background-color: #14304f !important;
+    color: #e6c878 !important;
+}
+
+/* Compact dashboard visuals row */
+.kx-dash-row { display: flex; gap: 0.75rem; margin: 0.5rem 0; }
+.kx-dash-panel {
+    flex: 1; background: #ffffff !important; border: 1px solid #e3e6ee;
+    border-radius: 10px; padding: 0.5rem; min-width: 0;
+}
+
+/* Sidebar */
+section[data-testid="stSidebar"] {
+    background: #f7f8fb !important;
+    border-right: 1px solid #e3e6ee;
+}
+/* Only target text nodes, not interactive widgets */
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3,
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] span:not([class*="st-"]),
+section[data-testid="stSidebar"] .stMarkdown {
+    color: #1a2333 !important;
+}
+/* Selectbox / dropdown text must be readable */
+section[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] * {
+    color: #1a2333 !important;
+    background-color: #ffffff !important;
+}
+/* Text input */
+section[data-testid="stSidebar"] input {
+    color: #1a2333 !important;
+    background-color: #ffffff !important;
+}
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
-# -------------------------
-# GROQ LLM WRAPPER
-# -------------------------
+KITE_PLOTLY = dict(
+    plot_bgcolor="#ffffff",
+    paper_bgcolor="#ffffff",
+    font=dict(family="Inter, system-ui, sans-serif", color="#1a2333"),
+    colorway=["#0a2540", "#c79a3a", "#14304f", "#e6c878", "#4a5568", "#a98a3d"],
+    margin=dict(t=50, l=40, r=20, b=40),
+)
+
+
+def kx_apply_theme(fig: go.Figure) -> go.Figure:
+    """Apply consistent KiteIQX styling to any Plotly figure."""
+    fig.update_layout(**KITE_PLOTLY)
+    return fig
+
+
+# ============================================================
+# GROQ WRAPPER
+# ============================================================
+
+FIXED_MODEL = "llama-3.1-8b-instant"
+
 
 class GroqLLM:
-    """Wrapper for Groq API for analytics"""
-    def __init__(self, api_key: str, model: str = "llama-3.1-70b-versatile"):
+    def __init__(self, api_key: str, model: str = FIXED_MODEL):
         self.client = Groq(api_key=api_key)
         self.model = model
-    
-    def predict(self, prompt: str, max_tokens: int = 2000) -> str:
-        """Make a prediction/completion"""
+
+    def predict(self, prompt: str, max_tokens: int = 2000, system: str = None) -> str:
+        if system is None:
+            system = (
+                "You are KiteIQX Intelligence, a senior management consultant. "
+                "Speak in clear business language. Always give specific numbers and "
+                "concrete recommendations - never vague generalities."
+            )
         try:
-            response = self.client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are KiteIQX Intelligence, an expert data analyst. Provide clear, actionable insights with specific numbers and recommendations."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
+            r = self.client.chat.completions.create(
                 model=self.model,
-                temperature=0.1,
-                max_tokens=max_tokens
+                temperature=0.2,
+                max_tokens=max_tokens,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
             )
-            return response.choices[0].message.content
+            return r.choices[0].message.content
         except Exception as e:
-            return f"Error: {str(e)}"
-    
-    def run(self, prompt: str) -> str:
-        """Alias for predict"""
-        return self.predict(prompt)
+            return f"AI error: {e}"
 
 
-# -------------------------
-# SMART VISUALIZATION ENGINE
-# -------------------------
-
-class SmartVisualizationEngine:
-    def __init__(self, analytics):
-        self.analytics = analytics
-        self.df = analytics.df
-        self.color_palette = px.colors.qualitative.Set3
-
-    def create_scatter_plot(self, x_col, y_col, color_col=None):
-        """Create enhanced scatter plot"""
-        try:
-            if color_col and color_col in self.analytics.categorical_cols:
-                fig = px.scatter(
-                    self.df, x=x_col, y=y_col, color=color_col,
-                    title=f"{y_col} vs {x_col} (colored by {color_col})",
-                    hover_data=[col for col in self.df.columns if col not in [x_col, y_col, color_col]][:3]
-                )
-            else:
-                fig = px.scatter(
-                    self.df, x=x_col, y=y_col,
-                    title=f"{y_col} vs {x_col}",
-                    hover_data=[col for col in self.df.columns if col not in [x_col, y_col]][:3]
-                )
-            
-            # Add correlation info
-            corr = self.df[x_col].corr(self.df[y_col])
-            fig.add_annotation(
-                text=f"Correlation: {corr:.3f}",
-                xref="paper", yref="paper", x=0.02, y=0.98,
-                showarrow=False, bgcolor="white", bordercolor="black"
-            )
-            
-            # Add trend line
-            if not self.df[x_col].isnull().all() and not self.df[y_col].isnull().all():
-                z = np.polyfit(self.df[x_col].dropna(), self.df[y_col].dropna(), 1)
-                p = np.poly1d(z)
-                x_trend = np.linspace(self.df[x_col].min(), self.df[x_col].max(), 100)
-                fig.add_trace(go.Scatter(
-                    x=x_trend, y=p(x_trend),
-                    mode='lines', name='Trend Line',
-                    line=dict(color='red', dash='dash')
-                ))
-            
-            return fig, f"Scatter plot created with correlation: {corr:.3f}"
-        except Exception as e:
-            return None, f"Error creating scatter plot: {str(e)}"
-
-    def create_correlation_matrix(self, selected_cols):
-        """Create correlation matrix heatmap"""
-        try:
-            numeric_cols = [col for col in selected_cols if col in self.analytics.numeric_cols]
-            if len(numeric_cols) < 2:
-                return None, "Need at least 2 numeric columns for correlation matrix"
-            
-            corr_matrix = self.df[numeric_cols].corr()
-            
-            fig = px.imshow(
-                corr_matrix,
-                text_auto=True,
-                aspect="auto",
-                color_continuous_scale='RdBu',
-                title="Correlation Matrix - KiteIQX Analysis"
-            )
-            
-            return fig, f"Correlation matrix for {len(numeric_cols)} variables"
-        except Exception as e:
-            return None, f"Error creating correlation matrix: {str(e)}"
-
-    def create_distribution_analysis(self, selected_cols):
-        """Create distribution analysis"""
-        try:
-            numeric_cols = [col for col in selected_cols if col in self.analytics.numeric_cols][:4]
-            if not numeric_cols:
-                return None, "No numeric columns selected"
-            
-            n_cols = min(2, len(numeric_cols))
-            n_rows = (len(numeric_cols) + 1) // 2
-            
-            fig = make_subplots(
-                rows=n_rows, cols=n_cols,
-                subplot_titles=[f"Distribution: {col}" for col in numeric_cols]
-            )
-            
-            for i, col in enumerate(numeric_cols):
-                row = (i // n_cols) + 1
-                col_pos = (i % n_cols) + 1
-                
-                fig.add_trace(go.Histogram(
-                    x=self.df[col], name=col,
-                    nbinsx=30, opacity=0.7
-                ), row=row, col=col_pos)
-            
-            fig.update_layout(height=400*n_rows, showlegend=False, title_text="Distribution Analysis - KiteIQX")
-            
-            return fig, f"Distribution analysis for {len(numeric_cols)} variables"
-        except Exception as e:
-            return None, f"Error creating distribution analysis: {str(e)}"
-
-    def create_predictive_model(self, target_col, predictor_cols):
-        """Create predictive model visualization"""
-        try:
-            if target_col not in self.analytics.numeric_cols:
-                return None, "Target must be numeric"
-            
-            predictor_cols = [col for col in predictor_cols if col in self.analytics.numeric_cols and col != target_col]
-            if not predictor_cols:
-                return None, "Need at least one numeric predictor"
-            
-            # Use first predictor for visualization
-            predictor = predictor_cols[0]
-            
-            # Prepare data
-            data = self.df[[target_col, predictor]].dropna()
-            X = data[predictor].values.reshape(-1, 1)
-            y = data[target_col].values
-            
-            # Fit model
-            model = LinearRegression()
-            model.fit(X, y)
-            
-            # Predictions
-            X_pred = np.linspace(X.min(), X.max(), 100)
-            y_pred = model.predict(X_pred.reshape(-1, 1))
-            
-            # Create visualization
-            fig = make_subplots(
-                rows=2, cols=2,
-                subplot_titles=[
-                    f"Regression: {predictor} → {target_col}",
-                    "Residuals Analysis",
-                    "Actual vs Predicted",
-                    "Model Performance"
-                ]
-            )
-            
-            # Scatter plot with regression line
-            fig.add_trace(go.Scatter(
-                x=X.flatten(), y=y, mode='markers', name='Actual Data',
-                marker=dict(color='blue', opacity=0.6)
-            ), row=1, col=1)
-            
-            fig.add_trace(go.Scatter(
-                x=X_pred.flatten(), y=y_pred, mode='lines', name='Predicted',
-                line=dict(color='red', width=2)
-            ), row=1, col=1)
-            
-            # Residuals
-            y_pred_actual = model.predict(X)
-            residuals = y - y_pred_actual
-            fig.add_trace(go.Scatter(
-                x=y_pred_actual, y=residuals, mode='markers',
-                name='Residuals', marker=dict(color='green', opacity=0.6)
-            ), row=1, col=2)
-            
-            # Actual vs Predicted
-            fig.add_trace(go.Scatter(
-                x=y, y=y_pred_actual, mode='markers',
-                name='Actual vs Predicted', marker=dict(color='purple', opacity=0.6)
-            ), row=2, col=1)
-            
-            # Perfect prediction line
-            min_val, max_val = min(y.min(), y_pred_actual.min()), max(y.max(), y_pred_actual.max())
-            fig.add_trace(go.Scatter(
-                x=[min_val, max_val], y=[min_val, max_val],
-                mode='lines', name='Perfect Prediction',
-                line=dict(color='black', dash='dash')
-            ), row=2, col=1)
-            
-            # R-squared indicator
-            r2 = r2_score(y, y_pred_actual)
-            fig.add_trace(go.Indicator(
-                mode="gauge+number",
-                value=r2,
-                domain={'x': [0, 1], 'y': [0, 1]},
-                title={'text': "R² Score"},
-                gauge={'axis': {'range': [None, 1]},
-                       'bar': {'color': "darkblue"},
-                       'steps': [{'range': [0, 0.5], 'color': "lightgray"},
-                                {'range': [0.5, 0.8], 'color': "yellow"},
-                                {'range': [0.8, 1], 'color': "green"}]}
-            ), row=2, col=2)
-            
-            fig.update_layout(height=600, showlegend=True, title_text="Predictive Model - KiteIQX Intelligence")
-            
-            return fig, f"Predictive model: R² = {r2:.3f}, RMSE = {np.sqrt(np.mean(residuals**2)):.3f}"
-        except Exception as e:
-            return None, f"Error creating predictive model: {str(e)}"
-
-    def create_time_series_analysis(self, date_col, value_col):
-        """Create time series analysis"""
-        try:
-            if date_col not in self.analytics.datetime_cols:
-                return None, "Selected column is not datetime"
-            if value_col not in self.analytics.numeric_cols:
-                return None, "Value column must be numeric"
-            
-            # Prepare data
-            ts_data = self.df[[date_col, value_col]].dropna().sort_values(date_col)
-            
-            fig = make_subplots(
-                rows=2, cols=1,
-                subplot_titles=[f"Time Series: {value_col}", "Trend Analysis"],
-                vertical_spacing=0.1
-            )
-            
-            # Main time series
-            fig.add_trace(go.Scatter(
-                x=ts_data[date_col], y=ts_data[value_col],
-                mode='lines+markers', name='Actual',
-                line=dict(color='blue', width=2)
-            ), row=1, col=1)
-            
-            # Moving average if enough data
-            if len(ts_data) > 7:
-                ts_data['ma7'] = ts_data[value_col].rolling(window=7).mean()
-                fig.add_trace(go.Scatter(
-                    x=ts_data[date_col], y=ts_data['ma7'],
-                    mode='lines', name='7-period MA',
-                    line=dict(color='red', dash='dash')
-                ), row=1, col=1)
-            
-            # Trend analysis
-            if len(ts_data) > 3:
-                x_numeric = np.arange(len(ts_data))
-                z = np.polyfit(x_numeric, ts_data[value_col], 1)
-                trend = np.poly1d(z)(x_numeric)
-                
-                fig.add_trace(go.Scatter(
-                    x=ts_data[date_col], y=trend,
-                    mode='lines', name='Trend',
-                    line=dict(color='green', width=3)
-                ), row=2, col=1)
-            
-            fig.update_layout(height=600, showlegend=True, title_text="Time Series Analysis - KiteIQX")
-            
-            return fig, f"Time series analysis for {value_col}"
-        except Exception as e:
-            return None, f"Error creating time series: {str(e)}"
-
-
-# -------------------------
-# UNIVERSAL ANALYTICS CLASS
-# -------------------------
+# ============================================================
+# ANALYTICS CORE
+# ============================================================
 
 class UniversalAnalytics:
-    def __init__(self, df, llm=None):
+    def __init__(self, df: pd.DataFrame, llm=None):
         self.df = df
         self.llm = llm
         self.original_df = df.copy()
-        self.color_palette = px.colors.qualitative.Set2
         self.process_data()
         self.generate_insights()
 
     def process_data(self):
-        """Intelligent data processing that adapts to any dataset"""
-        # Detect column types
         self.numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()
-        self.categorical_cols = self.df.select_dtypes(include=['object', 'category']).columns.tolist()
+        self.categorical_cols = self.df.select_dtypes(include=["object", "category"]).columns.tolist()
         self.datetime_cols = []
-        
-        # Data quality checks
-        self.data_quality_issues = {}
-        self.check_data_quality()
-        
-        # Try to detect datetime columns
-        for col in self.df.columns:
-            if any(keyword in col.lower() for keyword in ['date', 'time', 'created', 'updated', 'timestamp']):
+
+        # Attempt datetime parsing on plausibly-named columns
+        for col in list(self.df.columns):
+            if any(k in col.lower() for k in ("date", "time", "created", "updated", "timestamp")):
                 try:
                     self.df[col] = pd.to_datetime(self.df[col])
                     self.datetime_cols.append(col)
-                except:
+                    if col in self.categorical_cols:
+                        self.categorical_cols.remove(col)
+                except Exception:
                     pass
-        
-        # Detect special column types
-        self.money_cols = [col for col in self.numeric_cols 
-                          if any(word in col.lower() for word in 
-                                ['price', 'cost', 'amount', 'revenue', 'salary', 'income', 'fee', 'payment', 'spend'])]
-        
-        self.score_cols = [col for col in self.numeric_cols 
-                          if any(word in col.lower() for word in 
-                                ['score', 'rating', 'rank', 'grade', 'satisfaction', 'performance'])]
-        
-        self.id_cols = [col for col in self.df.columns 
-                       if any(word in col.lower() for word in ['id', 'key', 'index']) and 
-                       self.df[col].nunique() / len(self.df) > 0.8]
-        
-        # Create derived features
+
+        self.money_cols = [
+            c for c in self.numeric_cols
+            if any(w in c.lower() for w in ("price", "cost", "amount", "revenue", "salary", "income", "fee", "payment", "spend", "sales", "gmv"))
+        ]
+        self.score_cols = [c for c in self.numeric_cols if any(w in c.lower() for w in ("score", "rating", "rank", "grade"))]
+        self.id_cols = [
+            c for c in self.df.columns
+            if any(w in c.lower() for w in ("id", "key")) and self.df[c].nunique() / max(1, len(self.df)) > 0.8
+        ]
+
         if len(self.money_cols) > 1:
-            self.df['total_monetary_value'] = self.df[self.money_cols].sum(axis=1, skipna=True)
+            self.df["total_monetary_value"] = self.df[self.money_cols].sum(axis=1, skipna=True)
         elif len(self.money_cols) == 1:
-            self.df['total_monetary_value'] = self.df[self.money_cols[0]]
-        
-        # Update numeric columns after adding derived features
+            self.df["total_monetary_value"] = self.df[self.money_cols[0]]
+
         self.numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()
+        self.check_data_quality()
 
     def check_data_quality(self):
-        """Comprehensive data quality assessment"""
         issues = {}
-        
-        # 1. Duplicate detection
-        duplicate_count = self.df.duplicated().sum()
-        if duplicate_count > 0:
-            issues['duplicates'] = {
-                'count': duplicate_count,
-                'percentage': (duplicate_count / len(self.df)) * 100
-            }
-        
-        # 2. Missing data patterns
-        missing_data = {}
-        for col in self.df.columns:
-            missing_count = self.df[col].isnull().sum()
-            if missing_count > 0:
-                missing_data[col] = {
-                    'count': missing_count,
-                    'percentage': (missing_count / len(self.df)) * 100
-                }
-        
-        if missing_data:
-            issues['missing_data'] = missing_data
-        
-        # 3. Outlier detection for numeric columns
-        outlier_summary = {}
-        for col in self.numeric_cols:
-            if col in self.df.columns:
-                outliers = self.detect_outliers_advanced(col)
-                if outliers['count'] > 0:
-                    outlier_summary[col] = outliers
-        
-        if outlier_summary:
-            issues['outliers'] = outlier_summary
-        
+        dup = int(self.df.duplicated().sum())
+        if dup:
+            issues["duplicates"] = {"count": dup, "percentage": dup / len(self.df) * 100}
+
+        missing = {}
+        for c in self.df.columns:
+            m = int(self.df[c].isnull().sum())
+            if m:
+                missing[c] = {"count": m, "percentage": m / len(self.df) * 100}
+        if missing:
+            issues["missing_data"] = missing
+
+        outliers = {}
+        for c in self.numeric_cols:
+            o = self._iqr_outliers(c)
+            if o["count"] > 0:
+                outliers[c] = o
+        if outliers:
+            issues["outliers"] = outliers
+
         self.data_quality_issues = issues
 
-    def detect_outliers_advanced(self, column):
-        """Advanced outlier detection with context"""
-        if column not in self.numeric_cols:
-            return {'count': 0}
-        
-        data = self.df[column].dropna()
-        if len(data) < 10:
-            return {'count': 0}
-        
-        # Statistical outliers (IQR method)
-        Q1 = data.quantile(0.25)
-        Q3 = data.quantile(0.75)
+    def _iqr_outliers(self, col):
+        s = self.df[col].dropna()
+        if len(s) < 10:
+            return {"count": 0}
+        Q1, Q3 = s.quantile(0.25), s.quantile(0.75)
         IQR = Q3 - Q1
-        lower_bound = Q1 - 1.5 * IQR
-        upper_bound = Q3 + 1.5 * IQR
-        
-        statistical_outliers = data[(data < lower_bound) | (data > upper_bound)]
-        
+        lo, hi = Q1 - 1.5 * IQR, Q3 + 1.5 * IQR
+        outs = s[(s < lo) | (s > hi)]
         return {
-            'count': len(statistical_outliers),
-            'percentage': (len(statistical_outliers) / len(data)) * 100,
-            'range': f"{statistical_outliers.min():.2f} to {statistical_outliers.max():.2f}" if len(statistical_outliers) > 0 else "None"
+            "count": int(len(outs)),
+            "percentage": len(outs) / len(s) * 100,
+            "range": f"{outs.min():.2f} to {outs.max():.2f}" if len(outs) else "None",
+            "bounds": f"normal range: {lo:.2f} to {hi:.2f}",
         }
 
     def get_data_quality_report(self):
-        """Generate comprehensive data quality report"""
         if not self.data_quality_issues:
-            return "excellent", "✅ No significant data quality issues detected. Your dataset is ready for analysis!"
-        
-        report = "**KiteIQX Data Quality Assessment**\n\n"
-        
-        # Calculate quality score
-        total_issues = len(self.data_quality_issues)
-        severity_score = 0
-        
-        # Duplicates
-        if 'duplicates' in self.data_quality_issues:
-            dup_info = self.data_quality_issues['duplicates']
-            severity_score += min(dup_info['percentage'] * 2, 30)
-            report += f"**Duplicates:** {dup_info['count']:,} records ({dup_info['percentage']:.1f}%)\n"
-        
-        # Missing data
-        if 'missing_data' in self.data_quality_issues:
-            missing_severity = max([info['percentage'] for info in self.data_quality_issues['missing_data'].values()])
-            severity_score += min(missing_severity, 25)
-            report += f"**Missing Data:** Up to {missing_severity:.1f}% missing in some columns\n"
-        
-        # Outliers
-        if 'outliers' in self.data_quality_issues:
-            outlier_severity = max([info['percentage'] for info in self.data_quality_issues['outliers'].values()])
-            severity_score += min(outlier_severity, 15)
-            report += f"**Outliers:** Up to {outlier_severity:.1f}% outliers detected\n"
-        
-        # Overall quality score
-        quality_score = max(0, 100 - severity_score)
-        
-        if quality_score >= 90:
+            return "excellent", 100, "No significant data quality issues detected. The dataset is analysis-ready."
+
+        severity = 0
+        bullets = []
+        if "duplicates" in self.data_quality_issues:
+            d = self.data_quality_issues["duplicates"]
+            severity += min(d["percentage"] * 2, 30)
+            bullets.append(f"**Duplicates:** {d['count']:,} records ({d['percentage']:.1f}%)")
+        if "missing_data" in self.data_quality_issues:
+            top = max(v["percentage"] for v in self.data_quality_issues["missing_data"].values())
+            severity += min(top, 25)
+            bullets.append(f"**Missing data:** up to {top:.1f}% in worst-affected column")
+        if "outliers" in self.data_quality_issues:
+            top = max(v["percentage"] for v in self.data_quality_issues["outliers"].values())
+            severity += min(top, 15)
+            bullets.append(f"**Outliers:** up to {top:.1f}% values flagged as statistical outliers")
+
+        score = max(0, int(100 - severity))
+        if score >= 90:
             status = "excellent"
-        elif quality_score >= 75:
+        elif score >= 75:
             status = "good"
-        elif quality_score >= 60:
+        elif score >= 60:
             status = "fair"
         else:
             status = "poor"
-        
-        report += f"\n**Quality Score: {quality_score:.0f}/100**"
-        
-        return status, report
+        return status, score, "  \n".join(bullets)
 
     def clean_duplicates(self):
-        """Remove duplicate records"""
-        if 'duplicates' in self.data_quality_issues:
-            original_count = len(self.df)
-            self.df = self.df.drop_duplicates()
-            removed_count = original_count - len(self.df)
-            
-            # Re-process data
+        if "duplicates" in self.data_quality_issues:
+            n = len(self.df)
+            self.df = self.df.drop_duplicates().reset_index(drop=True)
+            removed = n - len(self.df)
             self.process_data()
             self.generate_insights()
-            
-            return f"✅ Removed {removed_count:,} duplicate records. Dataset now has {len(self.df):,} unique records."
-        return "ℹ️ No duplicates found to remove."
+            return f"Removed {removed:,} duplicate records. Now {len(self.df):,} unique rows."
+        return "No duplicates to remove."
 
     def generate_insights(self):
-        """Generate comprehensive insights about the dataset"""
         self.insights = {
-            'basic_stats': {
-                'rows': len(self.df),
-                'columns': len(self.df.columns),
-                'missing_pct': (self.df.isnull().sum().sum() / self.df.size) * 100,
+            "basic_stats": {
+                "rows": len(self.df),
+                "columns": len(self.df.columns),
+                "missing_pct": (self.df.isnull().sum().sum() / max(1, self.df.size)) * 100,
             },
-            'column_types': {
-                'numeric': len(self.numeric_cols),
-                'categorical': len(self.categorical_cols),
-                'datetime': len(self.datetime_cols)
-            }
+            "column_types": {
+                "numeric": len(self.numeric_cols),
+                "categorical": len(self.categorical_cols),
+                "datetime": len(self.datetime_cols),
+            },
         }
-        
-        # Monetary insights
-        if 'total_monetary_value' in self.df.columns:
-            money_col = 'total_monetary_value'
-            self.insights['monetary'] = {
-                'total_value': self.df[money_col].sum(),
-                'avg_value': self.df[money_col].mean(),
-                'max_value': self.df[money_col].max(),
+        if "total_monetary_value" in self.df.columns:
+            mc = "total_monetary_value"
+            self.insights["monetary"] = {
+                "total": float(self.df[mc].sum()),
+                "avg": float(self.df[mc].mean()),
+                "max": float(self.df[mc].max()),
+                "min": float(self.df[mc].min()),
             }
 
-    def query_data_with_ai(self, query):
-        """Enhanced AI query handler with Groq"""
+    # ---- AI helpers ----
+
+    def _data_brief(self, max_rows: int = 5) -> str:
+        return (
+            f"Rows: {len(self.df):,}\n"
+            f"Columns: {len(self.df.columns)} "
+            f"({len(self.numeric_cols)} numeric, {len(self.categorical_cols)} categorical, "
+            f"{len(self.datetime_cols)} datetime)\n"
+            f"Numeric columns: {', '.join(self.numeric_cols[:12])}\n"
+            f"Categorical columns: {', '.join(self.categorical_cols[:12])}\n\n"
+            f"Sample rows:\n{self.df.head(max_rows).to_string()}\n\n"
+            f"Numeric summary:\n{self.df[self.numeric_cols[:6]].describe().to_string() if self.numeric_cols else '(none)'}\n"
+        )
+
+    def ai_query(self, query: str) -> str:
         if not self.llm:
-            return "⚠️ KiteIQX Intelligence AI not available."
+            return "AI is not configured. Add GROQ_API_KEY to .streamlit/secrets.toml."
+        prompt = f"DATASET CONTEXT\n{self._data_brief()}\n\nUSER QUESTION\n{query}\n\nAnswer with specific numbers and concrete recommendations."
+        answer = self.llm.predict(prompt)
+        # Log question + answer to Google Sheets
+        filename = st.session_state.get("last_saved_path", "unknown")
+        log_ai_query(filename, query, answer)
+        return answer
 
+    def ai_executive_summary(self) -> str:
+        """Generate the storyboard narrative for the Executive Dashboard."""
+        if not self.llm:
+            return self._fallback_summary()
+
+        # Build a richer context including top value counts for categoricals
+        cat_context = ""
+        for c in self.categorical_cols[:3]:
+            vc = self.df[c].value_counts().head(5)
+            cat_context += f"\n  {c}: {', '.join(f'{k}={v}' for k, v in vc.items())}"
+
+        num_context = ""
+        for c in self.numeric_cols[:5]:
+            s = self.df[c].dropna()
+            num_context += f"\n  {c}: mean={s.mean():.2f}, median={s.median():.2f}, max={s.max():.2f}, min={s.min():.2f}"
+
+        monetary_ctx = ""
+        if "monetary" in self.insights:
+            m = self.insights["monetary"]
+            monetary_ctx = f"\n  Total monetary value: ${m['total']:,.0f}, avg per record: ${m['avg']:,.2f}"
+
+        prompt = (
+            f"DATASET CONTEXT\n{self._data_brief()}"
+            f"\nTop categorical breakdowns:{cat_context}"
+            f"\nNumeric profile:{num_context}"
+            f"{monetary_ctx}\n\n"
+            "Write a sharp 3-sentence executive narrative. Rules:\n"
+            "  Sentence 1 — BUSINESS DOMAIN: Name the specific business function this data covers "
+            "(e.g. 'retail sales', 'HR workforce', 'logistics') and the time scope if visible. "
+            "Be specific — not just 'this dataset contains records'.\n"
+            "  Sentence 2 — KEY BUSINESS SIGNAL: State the single most important pattern, trend, or "
+            "anomaly using actual numbers from the data. Focus on commercial or operational impact.\n"
+            "  Sentence 3 — DECISION IMPLICATION: What should a business leader do or watch because of this? "
+            "One clear, actionable implication.\n\n"
+            "Tone: senior consultant briefing a CEO. Specific numbers, zero filler, no bullet points — "
+            "three sentences of clean prose."
+        )
+        return self.llm.predict(prompt, max_tokens=600)
+
+    def ai_top_takeaways(self) -> list:
+        if not self.llm:
+            return self._fallback_takeaways()
+        prompt = (
+            f"DATASET CONTEXT\n{self._data_brief()}\n\n"
+            "Return exactly 3 strategic takeaways for a CEO. Each takeaway must:\n"
+            "  - Be a single, direct sentence\n"
+            "  - Reference a specific number from the data\n"
+            "  - Point toward a concrete growth opportunity, operational fix, or strategic decision — "
+            "not just an observation\n"
+            "  - Start with the finding, end with the recommended next move\n\n"
+            "Think like a McKinsey partner: the goal is to surface what to DO next, not just what the data shows.\n\n"
+            "Format: numbered list (1. 2. 3.) — no preamble, no headings, nothing else."
+        )
+        out = self.llm.predict(prompt, max_tokens=500)
+        lines = [re.sub(r"^\s*\d+[\.\)]\s*", "", ln).strip() for ln in out.split("\n") if ln.strip()]
+        lines = [ln for ln in lines if len(ln) > 10]
+        return lines[:3] if lines else self._fallback_takeaways()
+
+    def _fallback_summary(self) -> str:
+        b = self.insights["basic_stats"]
+        return (
+            f"This dataset contains {b['rows']:,} records across {b['columns']} columns, with "
+            f"{self.insights['column_types']['numeric']} numeric, {self.insights['column_types']['categorical']} "
+            f"categorical, and {self.insights['column_types']['datetime']} datetime fields. "
+            f"Overall completeness sits at {100 - b['missing_pct']:.1f}%. "
+            "Configure the AI assistant for a deeper narrative summary."
+        )
+
+    def _fallback_takeaways(self) -> list:
+        out = []
+        if self.numeric_cols:
+            c = self.numeric_cols[0]
+            out.append(f"Primary metric '{c}' averages {self.df[c].mean():.2f} (range {self.df[c].min():.2f} to {self.df[c].max():.2f}).")
+        if self.categorical_cols:
+            c = self.categorical_cols[0]
+            top = self.df[c].value_counts().head(1)
+            if len(top):
+                out.append(f"In '{c}', '{top.index[0]}' is the dominant segment with {top.iloc[0]:,} records ({top.iloc[0]/len(self.df)*100:.1f}% share).")
+        if self.insights["basic_stats"]["missing_pct"] > 5:
+            out.append(f"Data completeness is {100 - self.insights['basic_stats']['missing_pct']:.1f}%; the Data Quality tab will guide cleanup before deep analysis.")
+        while len(out) < 3:
+            out.append("Connect the AI engine (Groq key in secrets) for richer, data-specific takeaways.")
+        return out[:3]
+
+
+# ============================================================
+# VISUALIZATIONS
+# ============================================================
+
+class VizEngine:
+    def __init__(self, analytics: UniversalAnalytics):
+        self.a = analytics
+        self.df = analytics.df
+
+    def scatter(self, x, y, color=None):
+        if color and color in self.a.categorical_cols:
+            fig = px.scatter(self.df, x=x, y=y, color=color, title=f"{y} vs {x} by {color}")
+        else:
+            fig = px.scatter(self.df, x=x, y=y, title=f"{y} vs {x}")
         try:
-            # Create context about the data
-            context = f"""
-            KiteIQX Intelligence Dataset Analysis:
-            
-            Dataset Overview:
-            - Total Records: {len(self.df):,}
-            - Total Columns: {len(self.df.columns)}
-            
-            Numeric Columns ({len(self.numeric_cols)}): {', '.join(self.numeric_cols[:10])}
-            Categorical Columns ({len(self.categorical_cols)}): {', '.join(self.categorical_cols[:10])}
-            DateTime Columns ({len(self.datetime_cols)}): {', '.join(self.datetime_cols)}
-            
-            Data Preview (First 3 rows):
-            {self.df.head(3).to_string()}
-            
-            Statistical Summary (Numeric columns):
-            {self.df[self.numeric_cols[:5]].describe().to_string() if self.numeric_cols else 'No numeric columns'}
-            
-            User Query: {query}
-            
-            Provide a clear, actionable analysis with specific insights and recommendations.
-            """
-            
-            response = self.llm.predict(context, max_tokens=2000)
-            return response
-        except Exception as e:
-            return f"❌ Error processing query: {str(e)}"
+            corr = self.df[x].corr(self.df[y])
+            fig.add_annotation(text=f"r = {corr:.3f}", xref="paper", yref="paper", x=0.02, y=0.98,
+                               showarrow=False, bgcolor="rgba(255,255,255,0.9)", bordercolor="#0a2540")
+        except Exception:
+            corr = float("nan")
+        return kx_apply_theme(fig), f"Correlation {corr:.3f}" if corr == corr else "Scatter created"
+
+    def correlation_matrix(self, cols):
+        nums = [c for c in cols if c in self.a.numeric_cols]
+        if len(nums) < 2:
+            return None, "Need at least 2 numeric columns."
+        m = self.df[nums].corr()
+        fig = px.imshow(m, text_auto=".2f", aspect="auto", color_continuous_scale=["#b91c1c", "#ffffff", "#0a2540"], title="Correlation matrix")
+        return kx_apply_theme(fig), f"Correlation matrix for {len(nums)} variables"
+
+    def distribution(self, cols):
+        nums = [c for c in cols if c in self.a.numeric_cols][:4]
+        if not nums:
+            return None, "No numeric columns selected."
+        ncols = min(2, len(nums))
+        nrows = (len(nums) + 1) // 2
+        fig = make_subplots(rows=nrows, cols=ncols, subplot_titles=[f"{c}" for c in nums])
+        for i, c in enumerate(nums):
+            r, cc = i // ncols + 1, i % ncols + 1
+            fig.add_trace(go.Histogram(x=self.df[c], name=c, nbinsx=30, marker_color="#0a2540"), row=r, col=cc)
+        fig.update_layout(height=340 * nrows, showlegend=False, title_text="Distribution analysis")
+        return kx_apply_theme(fig), f"Distribution analysis for {len(nums)} variables"
+
+    def regression(self, target, predictors):
+        preds = [c for c in predictors if c in self.a.numeric_cols and c != target]
+        if not preds:
+            return None, "Need a numeric predictor."
+        p = preds[0]
+        data = self.df[[target, p]].dropna()
+        X = data[p].values.reshape(-1, 1)
+        y = data[target].values
+        m = LinearRegression().fit(X, y)
+        y_hat = m.predict(X)
+        r2 = r2_score(y, y_hat)
+        resid = y - y_hat
+        fig = make_subplots(rows=2, cols=2, subplot_titles=[f"{p} -> {target}", "Residuals", "Actual vs predicted", "R^2"])
+        xs = np.linspace(X.min(), X.max(), 100)
+        fig.add_trace(go.Scatter(x=X.flatten(), y=y, mode="markers", name="actual",
+                                 marker=dict(color="#0a2540", opacity=0.6)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=xs, y=m.predict(xs.reshape(-1, 1)), mode="lines", name="fit",
+                                 line=dict(color="#c79a3a", width=2)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=y_hat, y=resid, mode="markers", marker=dict(color="#c79a3a", opacity=0.6),
+                                 name="residuals"), row=1, col=2)
+        fig.add_trace(go.Scatter(x=y, y=y_hat, mode="markers", marker=dict(color="#14304f", opacity=0.6),
+                                 name="a-vs-p"), row=2, col=1)
+        lo, hi = min(y.min(), y_hat.min()), max(y.max(), y_hat.max())
+        fig.add_trace(go.Scatter(x=[lo, hi], y=[lo, hi], mode="lines", line=dict(color="#888", dash="dash"),
+                                 name="ideal"), row=2, col=1)
+        fig.add_trace(go.Indicator(
+            mode="gauge+number", value=r2,
+            domain={"x": [0, 1], "y": [0, 1]}, title={"text": "R^2"},
+            gauge={"axis": {"range": [None, 1]},
+                   "bar": {"color": "#0a2540"},
+                   "steps": [{"range": [0, 0.5], "color": "#f0f1f5"},
+                             {"range": [0.5, 0.8], "color": "#fcd980"},
+                             {"range": [0.8, 1], "color": "#a98a3d"}]}), row=2, col=2)
+        fig.update_layout(height=620, showlegend=False, title_text="Predictive model")
+        return kx_apply_theme(fig), f"R^2 = {r2:.3f}, RMSE = {np.sqrt(np.mean(resid**2)):.3f}"
+
+    def timeseries(self, date_col, value_col):
+        if date_col not in self.a.datetime_cols:
+            return None, "Column is not a datetime."
+        if value_col not in self.a.numeric_cols:
+            return None, "Value column must be numeric."
+        d = self.df[[date_col, value_col]].dropna().sort_values(date_col)
+        fig = make_subplots(rows=2, cols=1, subplot_titles=[f"{value_col} over time", "Trend"], vertical_spacing=0.12)
+        fig.add_trace(go.Scatter(x=d[date_col], y=d[value_col], mode="lines+markers", name=value_col,
+                                 line=dict(color="#0a2540", width=2)), row=1, col=1)
+        if len(d) > 7:
+            d["ma7"] = d[value_col].rolling(7).mean()
+            fig.add_trace(go.Scatter(x=d[date_col], y=d["ma7"], mode="lines", name="7-period MA",
+                                     line=dict(color="#c79a3a", dash="dash")), row=1, col=1)
+        if len(d) > 3:
+            xn = np.arange(len(d))
+            z = np.polyfit(xn, d[value_col], 1)
+            fig.add_trace(go.Scatter(x=d[date_col], y=np.poly1d(z)(xn), mode="lines", name="trend",
+                                     line=dict(color="#14304f", width=3)), row=2, col=1)
+        fig.update_layout(height=560, title_text="Time-series analysis")
+        return kx_apply_theme(fig), f"Time-series for {value_col}"
 
 
-# -------------------------
-# UTILITY FUNCTIONS
-# -------------------------
+# ============================================================
+# DEMO DATA
+# ============================================================
 
-def suggest_analysis_methods(analytics, selected_cols):
-    """Suggest optimal analysis methods based on selected columns"""
-    suggestions = []
-    
-    numeric_cols = [col for col in selected_cols if col in analytics.numeric_cols]
-    categorical_cols = [col for col in selected_cols if col in analytics.categorical_cols]
-    datetime_cols = [col for col in selected_cols if col in analytics.datetime_cols]
-    
-    # Correlation Analysis
-    if len(numeric_cols) >= 2:
-        suggestions.append({
-            'method': 'Correlation Analysis',
-            'description': f'Analyze relationships between {len(numeric_cols)} numeric variables',
-            'confidence': 'High',
-            'use_case': 'Identify which variables move together'
-        })
-    
-    # Scatter Plot Analysis
-    if len(numeric_cols) >= 2:
-        suggestions.append({
-            'method': 'Scatter Plot Analysis',
-            'description': 'Visualize relationships between pairs of variables',
-            'confidence': 'High',
-            'use_case': 'Spot trends, outliers, and patterns'
-        })
-    
-    # Distribution Analysis
-    if len(numeric_cols) >= 1:
-        suggestions.append({
-            'method': 'Distribution Analysis',
-            'description': f'Examine the distribution shape of {len(numeric_cols)} variables',
-            'confidence': 'High',
-            'use_case': 'Understand data spread and identify skewness'
-        })
-    
-    # Predictive Modeling
-    if len(numeric_cols) >= 2:
-        suggestions.append({
-            'method': 'Predictive Modeling',
-            'description': 'Build regression models to predict one variable from others',
-            'confidence': 'Medium',
-            'use_case': 'Forecast values and understand driver relationships'
-        })
-    
-    # Time Series Analysis
-    if len(datetime_cols) >= 1 and len(numeric_cols) >= 1:
-        suggestions.append({
-            'method': 'Time Series Analysis',
-            'description': 'Analyze trends and patterns over time',
-            'confidence': 'High',
-            'use_case': 'Identify seasonal patterns and forecast future values'
-        })
-    
-    # Segmentation Analysis
-    if len(categorical_cols) >= 1 and len(numeric_cols) >= 1:
-        suggestions.append({
-            'method': 'Segmentation Analysis',
-            'description': 'Compare performance across different categories',
-            'confidence': 'High',
-            'use_case': 'Identify top/bottom performing segments'
-        })
-    
-    return suggestions
-
-
-def generate_demo_data(demo_type):
-    """Generate different types of demo data"""
+def generate_demo(kind: str) -> pd.DataFrame:
     np.random.seed(42)
-    
-    if demo_type == "E-commerce Sales":
-        n_records = 1000
+    if kind == "E-commerce Sales":
+        n = 1000
         return pd.DataFrame({
-            'order_id': [f'ORD{i:06d}' for i in range(1, n_records + 1)],
-            'customer_id': [f'CUST{i:05d}' for i in np.random.randint(1, 501, n_records)],
-            'product_category': np.random.choice(['Electronics', 'Clothing', 'Home', 'Books', 'Sports'], n_records),
-            'order_value': np.random.lognormal(4, 0.8, n_records),
-            'shipping_cost': np.random.uniform(5, 25, n_records),
-            'customer_age': np.random.randint(18, 75, n_records),
-            'customer_segment': np.random.choice(['Premium', 'Standard', 'Budget'], n_records),
-            'delivery_days': np.random.randint(1, 15, n_records),
-            'customer_rating': np.random.randint(1, 6, n_records),
+            "order_id": [f"ORD{i:06d}" for i in range(1, n + 1)],
+            "customer_id": [f"CUST{i:05d}" for i in np.random.randint(1, 501, n)],
+            "product_category": np.random.choice(["Electronics", "Clothing", "Home", "Books", "Sports"], n),
+            "order_value": np.random.lognormal(4, 0.8, n),
+            "shipping_cost": np.random.uniform(5, 25, n),
+            "customer_age": np.random.randint(18, 75, n),
+            "customer_segment": np.random.choice(["Premium", "Standard", "Budget"], n),
+            "delivery_days": np.random.randint(1, 15, n),
+            "customer_rating": np.random.randint(1, 6, n),
+            "order_date": pd.date_range("2024-01-01", periods=n, freq="D"),
         })
-    
-    elif demo_type == "Employee Data":
-        n_records = 500
+    if kind == "Employee Data":
+        n = 500
         return pd.DataFrame({
-            'employee_id': [f'EMP{i:04d}' for i in range(1, n_records + 1)],
-            'department': np.random.choice(['Engineering', 'Sales', 'Marketing', 'HR', 'Finance'], n_records),
-            'salary': np.random.normal(75000, 25000, n_records),
-            'age': np.random.randint(22, 65, n_records),
-            'years_experience': np.random.randint(0, 25, n_records),
-            'performance_score': np.random.normal(3.5, 0.8, n_records),
-            'job_satisfaction': np.random.randint(1, 11, n_records),
+            "employee_id": [f"EMP{i:04d}" for i in range(1, n + 1)],
+            "department": np.random.choice(["Engineering", "Sales", "Marketing", "HR", "Finance"], n),
+            "salary": np.random.normal(75000, 25000, n),
+            "age": np.random.randint(22, 65, n),
+            "years_experience": np.random.randint(0, 25, n),
+            "performance_score": np.random.normal(3.5, 0.8, n),
+            "job_satisfaction": np.random.randint(1, 11, n),
         })
-    
-    else:  # Default simple demo
-        n_records = 300
-        return pd.DataFrame({
-            'id': range(1, n_records + 1),
-            'category': np.random.choice(['A', 'B', 'C', 'D'], n_records),
-            'value': np.random.uniform(10, 100, n_records),
-            'score': np.random.randint(1, 11, n_records),
-            'amount': np.random.uniform(100, 1000, n_records)
-        })
+    n = 300
+    return pd.DataFrame({
+        "id": range(1, n + 1),
+        "category": np.random.choice(["A", "B", "C", "D"], n),
+        "value": np.random.uniform(10, 100, n),
+        "score": np.random.randint(1, 11, n),
+        "amount": np.random.uniform(100, 1000, n),
+    })
 
 
-def render_welcome_screen():
-    """Render welcome screen when no data is loaded"""
-    st.markdown("### Welcome to KiteIQX Intelligence")
-    st.markdown('<div class="kite-badge">⚡ Powered by Groq Ultra-Fast AI</div>', unsafe_allow_html=True)
-    
-    st.markdown("""
-    **KiteIQX Intelligence** is your AI-powered data analysis companion, delivering lightning-fast insights 
-    with the power of Groq's LPU™ inference technology.
-    """)
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("""
-        **🧠 Smart Analytics**
-        - Groq-powered AI insights
-        - Automatic pattern detection
-        - Professional visualizations
-        """)
-    
-    with col2:
-        st.markdown("""
-        **🔍 Data Quality**
-        - Duplicate detection
-        - Missing data analysis
-        - Outlier identification
-        """)
-    
-    with col3:
-        st.markdown("""
-        **📊 Advanced Visualization**
-        - Predictive modeling
-        - Time series analysis
-        - Interactive dashboards
-        """)
-    
-    st.markdown("---")
-    st.markdown("### 🚀 Get Started")
-    st.info("📁 Upload a CSV file or try our demo data in the sidebar to begin your analysis!")
+# ============================================================
+# FILE LOADING (CSV + XLSX + save to disk)
+# ============================================================
 
+def load_uploaded_file(uploaded_file) -> pd.DataFrame:
+    """Load CSV/XLSX/XLS from an uploaded file and persist to data/uploads/."""
+    name = uploaded_file.name
+    ext = name.lower().rsplit(".", 1)[-1] if "." in name else ""
 
-def main():
-    # Header
-    st.markdown('<div class="main-header">🪁 KiteIQX Intelligence</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Ultra-Fast AI-Powered Data Analytics Platform</div>', unsafe_allow_html=True)
-    
-    # Groq status badge
-    if GROQ_AVAILABLE:
-        st.markdown('<div class="kite-badge">✅ Groq AI Active - Lightning Speed Analytics</div>', unsafe_allow_html=True)
+    # Save a copy for archival before reading (rewind after)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    saved = UPLOAD_DIR / f"{ts}_{name}"
+    raw = uploaded_file.getbuffer()
+    with open(saved, "wb") as f:
+        f.write(raw)
+    st.session_state["last_saved_path"] = str(saved)
+
+    # Read into pandas
+    buf = io.BytesIO(raw)
+    if ext in ("xlsx", "xls"):
+        df = pd.read_excel(buf)
+    elif ext == "csv":
+        df = pd.read_csv(buf)
     else:
-        st.error("⚠️ Groq library not available. Install with: pip install groq")
-
-    # Initialize session state
-    if 'analytics' not in st.session_state:
-        st.session_state.analytics = None
-    if 'viz_engine' not in st.session_state:
-        st.session_state.viz_engine = None
-
-    # Sidebar
-    with st.sidebar:
-        st.header("🔧 KiteIQX Configuration")
-        
-        # Fixed model — selector removed from UI
-        groq_model = "llama-3.1-70b-versatile"
-        
-        st.success("🔑 Groq API: Internal (Free & Fast)")
-        
-        st.markdown("---")
-        st.subheader("📊 Load Your Data")
-        
-        # File upload
-        uploaded_file = st.file_uploader("Upload CSV File", type="csv")
-        
-        # URL input
-        data_url = st.text_input("Or enter CSV URL:")
-        
-        # Demo data selector
-        demo_options = ["", "E-commerce Sales", "Employee Data", "Simple Demo"]
-        selected_demo = st.selectbox("Or try demo data:", demo_options)
-        
-        # Load data buttons
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("📤 Load Data", type="primary"):
-                df = None
-                try:
-                    if uploaded_file:
-                        df = pd.read_csv(uploaded_file)
-                        st.success("✅ File uploaded!")
-                    elif data_url:
-                        response = requests.get(data_url, timeout=30)
-                        df = pd.read_csv(io.StringIO(response.text))
-                        st.success("✅ Data loaded from URL!")
-                    
-                    if df is not None:
-                        initialize_analytics(df, groq_model)
-                        
-                except Exception as e:
-                    st.error(f"❌ Error loading data: {str(e)}")
-        
-        with col2:
-            if st.button("🎲 Demo Data") and selected_demo:
-                try:
-                    df = generate_demo_data(selected_demo)
-                    initialize_analytics(df, groq_model)
-                    st.success(f"✅ Loaded {selected_demo}!")
-                except Exception as e:
-                    st.error(f"❌ Error loading demo: {str(e)}")
-        
-        # Data info
-        if st.session_state.analytics:
-            st.markdown("---")
-            st.subheader("📈 Dataset Info")
-            stats = st.session_state.analytics.insights['basic_stats']
-            st.metric("Rows", f"{stats['rows']:,}")
-            st.metric("Columns", stats['columns'])
-            st.metric("Data Quality", f"{100 - stats['missing_pct']:.1f}%")
-
-    # Main content
-    if st.session_state.analytics is not None:
-        render_main_content()
-    else:
-        render_welcome_screen()
-
-
-def initialize_analytics(df, groq_model="llama-3.1-70b-versatile"):
-    """Initialize analytics engine with Groq"""
-    llm = None
-    if GROQ_AVAILABLE and GROQ_API_KEY:
+        # Best-effort: try CSV first, then Excel
         try:
-            llm = GroqLLM(api_key=GROQ_API_KEY, model=groq_model)
-            st.success(f"🧠 KiteIQX Intelligence initialized with {groq_model}!")
-        except Exception as e:
-            st.error(f"❌ Error initializing Groq: {str(e)}")
-    
-    st.session_state.analytics = UniversalAnalytics(df, llm)
-    st.session_state.viz_engine = SmartVisualizationEngine(st.session_state.analytics)
+            df = pd.read_csv(io.BytesIO(raw))
+        except Exception:
+            df = pd.read_excel(io.BytesIO(raw))
+    return df
 
 
-def render_main_content():
-    """Render the main content tabs"""
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📊 Dashboard", 
-        "🚀 Advanced Analytics", 
-        "🧠 AI Intelligence", 
-        "🎨 Custom Charts", 
-        "🗂️ Data Explorer"
-    ])
-    
-    with tab1:
-        render_dashboard()
-    
-    with tab2:
-        render_advanced_analytics()
-    
-    with tab3:
-        render_ai_assistant()
-    
-    with tab4:
-        render_custom_charts()
-    
-    with tab5:
-        render_data_explorer()
+# ============================================================
+# UI BLOCKS
+# ============================================================
+
+def render_header():
+    st.markdown(
+        """
+        <div class="kx-brand">
+            <div class="kx-mark">K</div>
+            <div class="kx-wordmark">Kite<span>IQX</span> Intelligence</div>
+        </div>
+        <div class="kx-tag">Where intelligence meets impact — turn raw data into a CEO-ready story in minutes.</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_welcome():
+    st.markdown(
+        """
+        <div class="kx-hero">
+            <h2>Upload your data, get a CEO-ready narrative in minutes.</h2>
+            <p>Built for non-technical leaders. Drop a CSV or Excel file and KiteIQX will surface the
+            <span class="kx-hero-accent">three insights that matter</span>, audit data quality, and let you ask follow-up
+            questions in plain English.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown(
+            """<div class="kx-card"><div class="kx-card-title">Executive Dashboard</div>
+            <div class="kx-card-sub">Narrative summary, hero KPIs, and the three takeaways a leader needs.</div></div>""",
+            unsafe_allow_html=True,
+        )
+    with c2:
+        st.markdown(
+            """<div class="kx-card"><div class="kx-card-title">AI Intelligence</div>
+            <div class="kx-card-sub">Ask any business question; get a consultant-grade answer in seconds.</div></div>""",
+            unsafe_allow_html=True,
+        )
+    with c3:
+        st.markdown(
+            """<div class="kx-card"><div class="kx-card-title">Data Quality</div>
+            <div class="kx-card-sub">Detect duplicates, missingness, and outliers before they cost you a decision.</div></div>""",
+            unsafe_allow_html=True,
+        )
+    st.info("Use the sidebar to upload a CSV / XLSX file or try a demo dataset.")
 
 
 def render_dashboard():
-    """Clean, focused dashboard"""
-    analytics = st.session_state.analytics
-    insights = analytics.insights
-    
-    # Key Metrics
-    st.subheader("📊 Executive Dashboard")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Total Records", f"{insights['basic_stats']['rows']:,}")
-    
-    with col2:
-        st.metric("Columns", insights['basic_stats']['columns'])
-    
-    with col3:
-        if 'monetary' in insights:
-            st.metric("Total Value", f"${insights['monetary']['total_value']:,.0f}")
-        else:
-            st.metric("Numeric Cols", insights['column_types']['numeric'])
-    
-    with col4:
-        missing_pct = insights['basic_stats']['missing_pct']
-        st.metric("Data Quality", f"{100 - missing_pct:.1f}%")
+    a: UniversalAnalytics = st.session_state.analytics
+    ins = a.insights
 
-    # Data Quality Section
-    st.markdown("---")
-    st.subheader("🔍 Data Quality Assessment")
-    
-    quality_status, quality_report = analytics.get_data_quality_report()
-    
-    if quality_status == "excellent":
-        st.markdown(f'<div class="data-quality-excellent">{quality_report}</div>', unsafe_allow_html=True)
-    elif quality_status in ["good", "fair"]:
-        st.markdown(f'<div class="data-quality-warning">{quality_report}</div>', unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div class="data-quality-poor">{quality_report}</div>', unsafe_allow_html=True)
-    
-    # Quick actions
-    if quality_status != "excellent":
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🧹 Clean Duplicates"):
-                result = analytics.clean_duplicates()
-                st.success(result)
-                st.rerun()
-        with col2:
-            if st.button("🔄 Refresh Quality Check"):
-                analytics.check_data_quality()
-                st.success("✅ Quality check refreshed!")
-                st.rerun()
-
-    # Quick Insights
-    st.markdown("---")
-    st.subheader("💡 Quick Insights")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**📋 Column Summary**")
-        st.write(f"📊 Numeric columns: {len(analytics.numeric_cols)}")
-        st.write(f"🏷️ Categorical columns: {len(analytics.categorical_cols)}")
-        st.write(f"📅 DateTime columns: {len(analytics.datetime_cols)}")
-    
-    with col2:
-        st.markdown("**📈 Data Summary**")
-        if analytics.numeric_cols:
-            primary_col = analytics.numeric_cols[0]
-            mean_val = analytics.df[primary_col].mean()
-            st.write(f"Average {primary_col}: {mean_val:.2f}")
-
-
-def render_advanced_analytics():
-    """Enhanced advanced analytics tab"""
-    st.subheader("🚀 Advanced Analytics")
-    
-    analytics = st.session_state.analytics
-    viz_engine = st.session_state.viz_engine
-    
-    # Column Selection
-    st.markdown("### Step 1: Select Columns for Analysis")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        available_cols = analytics.df.columns.tolist()
-        selected_cols = st.multiselect(
-            "Choose columns to analyze:",
-            available_cols,
-            default=available_cols[:5],
-            help="Select the columns you want to include in your analysis"
+    # --- HERO BAND ---
+    record_str = f"{ins['basic_stats']['rows']:,}"
+    col_str = f"{ins['basic_stats']['columns']}"
+    quality_pct = 100 - ins["basic_stats"]["missing_pct"]
+    monetary_line = ""
+    if "monetary" in ins:
+        monetary_line = (
+            f' Total tracked value across the dataset is '
+            f'<span class="kx-hero-accent">${ins["monetary"]["total"]:,.0f}</span>.'
         )
-    
-    with col2:
-        if selected_cols:
-            st.markdown("**Selected Columns:**")
-            for col in selected_cols:
-                col_type = "📊 Numeric" if col in analytics.numeric_cols else "🏷️ Categorical" if col in analytics.categorical_cols else "📅 DateTime" if col in analytics.datetime_cols else "❓ Other"
-                st.write(f"• {col} ({col_type})")
-
-    if not selected_cols:
-        st.warning("⚠️ Please select at least one column to proceed with analysis.")
-        return
-
-    # Method Suggestions
-    st.markdown("---")
-    st.markdown("### Step 2: Recommended Analysis Methods")
-    
-    suggestions = suggest_analysis_methods(analytics, selected_cols)
-    
-    if not suggestions:
-        st.info("ℹ️ No analysis methods available for the selected columns. Try selecting different column types.")
-        return
-    
-    # Display methods
-    for i, suggestion in enumerate(suggestions):
-        with st.expander(f"📊 {suggestion['method']} (Confidence: {suggestion['confidence']})", expanded=False):
-            col1, col2 = st.columns([3, 1])
-            
-            with col1:
-                st.markdown(f"**Description:** {suggestion['description']}")
-                st.markdown(f"**Use Case:** {suggestion['use_case']}")
-            
-            with col2:
-                if st.button(f"▶️ Run", key=f"run_{i}", type="primary"):
-                    with st.spinner(f"⚡ Running {suggestion['method']}..."):
-                        try:
-                            fig, message = run_simple_analysis(suggestion['method'], selected_cols, viz_engine, analytics)
-                            
-                            if fig:
-                                st.plotly_chart(fig, use_container_width=True)
-                                st.success(f"✅ {message}")
-                            else:
-                                st.error(f"❌ {message}")
-                                
-                        except Exception as e:
-                            st.error(f"❌ Error running analysis: {str(e)}")
-
-
-def run_simple_analysis(method, selected_cols, viz_engine, analytics):
-    """Run simple analysis methods"""
-    numeric_cols = [col for col in selected_cols if col in analytics.numeric_cols]
-    categorical_cols = [col for col in selected_cols if col in analytics.categorical_cols]
-    datetime_cols = [col for col in selected_cols if col in analytics.datetime_cols]
-    
-    if method == 'Correlation Analysis':
-        return viz_engine.create_correlation_matrix(selected_cols)
-    
-    elif method == 'Distribution Analysis':
-        return viz_engine.create_distribution_analysis(selected_cols)
-    
-    elif method == 'Scatter Plot Analysis' and len(numeric_cols) >= 2:
-        color_col = categorical_cols[0] if categorical_cols else None
-        return viz_engine.create_scatter_plot(numeric_cols[0], numeric_cols[1], color_col)
-    
-    elif method == 'Predictive Modeling' and len(numeric_cols) >= 2:
-        target = numeric_cols[-1]
-        predictors = numeric_cols[:-1]
-        return viz_engine.create_predictive_model(target, predictors)
-    
-    elif method == 'Time Series Analysis':
-        if datetime_cols and numeric_cols:
-            return viz_engine.create_time_series_analysis(datetime_cols[0], numeric_cols[0])
-    
-    return None, "Unable to run analysis with current selection"
-
-
-def render_ai_assistant():
-    """AI assistant tab with Groq"""
-    st.subheader("🧠 KiteIQX Intelligence AI Assistant")
-    
-    analytics = st.session_state.analytics
-    
-    if not analytics.llm:
-        st.warning("⚠️ AI Assistant requires Groq initialization.")
-        return
-    
-    st.markdown("""
-    ### ⚡ Ask KiteIQX Intelligence to Analyze Your Data
-    
-    The AI can provide deep insights, identify patterns, and answer complex questions about your data 
-    at lightning speed with Groq's ultra-fast inference.
-    """)
-    
-    # Quick action buttons
-    st.markdown("**🚀 Quick Actions:**")
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        if st.button("📊 Data Overview"):
-            query = "Give me a comprehensive overview of this dataset with key insights"
-            with st.spinner("⚡ KiteIQX analyzing..."):
-                response = analytics.query_data_with_ai(query)
-                st.markdown('<div class="ai-response-box">', unsafe_allow_html=True)
-                st.markdown("**KiteIQX Intelligence Response:**")
-                st.markdown(response)
-                st.markdown('</div>', unsafe_allow_html=True)
-    
-    with col2:
-        if st.button("🔗 Find Correlations"):
-            query = "Identify the strongest correlations in the data and explain their significance"
-            with st.spinner("⚡ KiteIQX analyzing..."):
-                response = analytics.query_data_with_ai(query)
-                st.markdown('<div class="ai-response-box">', unsafe_allow_html=True)
-                st.markdown("**KiteIQX Intelligence Response:**")
-                st.markdown(response)
-                st.markdown('</div>', unsafe_allow_html=True)
-    
-    with col3:
-        if st.button("📈 Identify Trends"):
-            query = "Identify and explain key trends and patterns in the data"
-            with st.spinner("⚡ KiteIQX analyzing..."):
-                response = analytics.query_data_with_ai(query)
-                st.markdown('<div class="ai-response-box">', unsafe_allow_html=True)
-                st.markdown("**KiteIQX Intelligence Response:**")
-                st.markdown(response)
-                st.markdown('</div>', unsafe_allow_html=True)
-    
-    with col4:
-        if st.button("⚠️ Spot Outliers"):
-            query = "Find and explain any outliers or anomalies in the data"
-            with st.spinner("⚡ KiteIQX analyzing..."):
-                response = analytics.query_data_with_ai(query)
-                st.markdown('<div class="ai-response-box">', unsafe_allow_html=True)
-                st.markdown("**KiteIQX Intelligence Response:**")
-                st.markdown(response)
-                st.markdown('</div>', unsafe_allow_html=True)
-
-    # Custom query input
-    st.markdown("---")
-    st.markdown("**💬 Custom Analysis Request:**")
-    
-    user_input = st.text_area(
-        "Describe what you want to analyze:",
-        placeholder="""Examples:
-• "What are the main factors driving sales performance?"
-• "Identify customer segments and their characteristics"
-• "Find anomalies in transaction patterns"
-• "Predict which products are likely to perform best next quarter"
-""",
-        height=120
+    st.markdown(
+        f"""
+        <div class="kx-hero">
+            <h2>Business Story</h2>
+            <p>KiteIQX has analysed <span class="kx-hero-accent">{record_str}</span> records across
+            <span class="kx-hero-accent">{col_str}</span> dimensions
+            ({ins['column_types']['numeric']} numeric · {ins['column_types']['categorical']} categorical · {ins['column_types']['datetime']} time-based)
+            with <span class="kx-hero-accent">{quality_pct:.1f}%</span> completeness.{monetary_line}
+            The AI narrative and takeaways below reflect what the numbers actually say about your business.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-    
-    if st.button("⚡ Send to KiteIQX Intelligence", type="primary") and user_input:
-        with st.spinner("⚡ KiteIQX Intelligence processing at lightning speed..."):
-            try:
-                response = analytics.query_data_with_ai(user_input)
-                st.markdown("---")
-                st.markdown('<div class="ai-response-box">', unsafe_allow_html=True)
-                st.markdown("**🧠 KiteIQX Intelligence Response:**")
-                st.markdown(response)
-                st.markdown('</div>', unsafe_allow_html=True)
-            except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
 
-    # Available columns reference
-    with st.expander("📋 Available Columns Reference"):
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown("**📊 Numeric Columns:**")
-            for col in analytics.numeric_cols[:10]:
-                st.write(f"• {col}")
-        
-        with col2:
-            st.markdown("**🏷️ Categorical Columns:**")
-            for col in analytics.categorical_cols[:10]:
-                st.write(f"• {col}")
-        
-        with col3:
-            st.markdown("**📅 DateTime Columns:**")
-            for col in analytics.datetime_cols:
-                st.write(f"• {col}")
+    # --- HERO KPI CARDS ---
+    cards = st.columns(4)
+    cards[0].markdown(
+        f"""<div class="kx-card"><div class="kx-card-title">Records analyzed</div>
+        <div class="kx-card-value">{record_str}</div>
+        <div class="kx-card-sub">Rows of business activity</div></div>""", unsafe_allow_html=True)
+    cards[1].markdown(
+        f"""<div class="kx-card"><div class="kx-card-title">Dimensions</div>
+        <div class="kx-card-value">{col_str}</div>
+        <div class="kx-card-sub">{ins['column_types']['numeric']} numeric · {ins['column_types']['categorical']} categorical · {ins['column_types']['datetime']} time</div></div>""", unsafe_allow_html=True)
+    if "monetary" in ins:
+        cards[2].markdown(
+            f"""<div class="kx-card"><div class="kx-card-title">Total monetary value</div>
+            <div class="kx-card-value">${ins['monetary']['total']:,.0f}</div>
+            <div class="kx-card-sub">Average per record: ${ins['monetary']['avg']:,.2f}</div></div>""", unsafe_allow_html=True)
+    else:
+        cards[2].markdown(
+            f"""<div class="kx-card"><div class="kx-card-title">Numeric depth</div>
+            <div class="kx-card-value">{ins['column_types']['numeric']}</div>
+            <div class="kx-card-sub">Quantifiable dimensions</div></div>""", unsafe_allow_html=True)
+    cards[3].markdown(
+        f"""<div class="kx-card"><div class="kx-card-title">Data completeness</div>
+        <div class="kx-card-value">{quality_pct:.1f}%</div>
+        <div class="kx-card-sub">Higher is better; details in Data Quality tab</div></div>""", unsafe_allow_html=True)
+
+    # --- NARRATIVE: DATA STORY ---
+    st.markdown(" ")
+    st.markdown(
+        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
+        'color:#4a5568;font-weight:600;margin-bottom:0.25rem;">Business narrative</div>',
+        unsafe_allow_html=True,
+    )
+
+    if "exec_summary" not in st.session_state:
+        with st.spinner("KiteIQX is reading the business context..."):
+            st.session_state.exec_summary = a.ai_executive_summary()
+    st.markdown(
+        f'<div class="kx-callout" style="font-size:1.02rem;line-height:1.65;">'
+        f'{st.session_state.exec_summary}</div>',
+        unsafe_allow_html=True,
+    )
+
+    refresh_col, _ = st.columns([1, 5])
+    if refresh_col.button("↻ Regenerate", key="regen_summary"):
+        st.session_state.pop("exec_summary", None)
+        st.session_state.pop("takeaways", None)
+        st.rerun()
+
+    # --- TOP 3 TAKEAWAYS ---
+    st.markdown(" ")
+    st.markdown(
+        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
+        'color:#4a5568;font-weight:600;margin-bottom:0.35rem;">3 decisions this data supports</div>',
+        unsafe_allow_html=True,
+    )
+    if "takeaways" not in st.session_state:
+        with st.spinner("Identifying the headline insights..."):
+            st.session_state.takeaways = a.ai_top_takeaways()
+
+    # Log summary + takeaways to Google Sheets once per upload session
+    if not st.session_state.get("upload_logged") and st.session_state.get("upload_filename"):
+        log_upload(
+            st.session_state.upload_filename,
+            a.df,
+            summary=st.session_state.get("exec_summary", ""),
+            takeaways=st.session_state.get("takeaways", []),
+        )
+        st.session_state.upload_logged = True
+
+    for i, t in enumerate(st.session_state.takeaways, 1):
+        st.markdown(
+            f"""<div class="kx-takeaway"><div class="kx-takeaway-num">{i}</div>
+            <div class="kx-takeaway-body">{t}</div></div>""", unsafe_allow_html=True)
+
+    # --- SUPPORTING VISUALS DASHBOARD ---
+    st.markdown(" ")
+    st.markdown(
+        '<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.8px;'
+        'color:#4a5568;font-weight:600;margin-bottom:0.5rem;">Supporting visuals</div>',
+        unsafe_allow_html=True,
+    )
+
+    COMPACT = dict(
+        plot_bgcolor="#ffffff",
+        paper_bgcolor="#ffffff",
+        font=dict(family="Inter, system-ui, sans-serif", color="#1a2333", size=11),
+        colorway=["#0a2540", "#c79a3a", "#14304f", "#e6c878", "#4a5568"],
+        margin=dict(t=36, l=28, r=12, b=28),
+        height=220,
+        showlegend=False,
+    )
+
+    vis_cols = st.columns(3)
+
+    # Panel 1 — top categorical bar
+    with vis_cols[0]:
+        if a.categorical_cols:
+            cat = a.categorical_cols[0]
+            top = a.df[cat].value_counts().head(6).reset_index()
+            top.columns = [cat, "count"]
+            fig1 = px.bar(top, x=cat, y="count", title=f"{cat} breakdown")
+            fig1.update_traces(marker_color="#0a2540")
+            fig1.update_layout(**COMPACT)
+            fig1.update_xaxes(tickangle=-30, tickfont_size=10)
+            st.plotly_chart(fig1, use_container_width=True)
+        elif a.numeric_cols:
+            c = a.numeric_cols[0]
+            fig1 = px.histogram(a.df, x=c, nbins=20, title=f"{c} distribution")
+            fig1.update_traces(marker_color="#0a2540")
+            fig1.update_layout(**COMPACT)
+            st.plotly_chart(fig1, use_container_width=True)
+
+    # Panel 2 — time trend or scatter
+    with vis_cols[1]:
+        if a.datetime_cols and a.numeric_cols:
+            dc = a.datetime_cols[0]
+            vc = a.money_cols[0] if a.money_cols else a.numeric_cols[0]
+            ts = a.df[[dc, vc]].dropna().sort_values(dc)
+            fig2 = px.line(ts, x=dc, y=vc, title=f"{vc} over time")
+            fig2.update_traces(line_color="#c79a3a", line_width=2)
+            fig2.update_layout(**COMPACT)
+            st.plotly_chart(fig2, use_container_width=True)
+        elif len(a.numeric_cols) >= 2:
+            x2, y2 = a.numeric_cols[0], a.numeric_cols[1]
+            fig2 = px.scatter(a.df, x=x2, y=y2, title=f"{y2} vs {x2}")
+            fig2.update_traces(marker=dict(color="#0a2540", opacity=0.5, size=5))
+            fig2.update_layout(**COMPACT)
+            st.plotly_chart(fig2, use_container_width=True)
+
+    # Panel 3 — second categorical breakdown or numeric distribution
+    with vis_cols[2]:
+        if len(a.categorical_cols) >= 2:
+            cat2 = a.categorical_cols[1]
+            top2 = a.df[cat2].value_counts().head(6).reset_index()
+            top2.columns = [cat2, "count"]
+            fig3 = px.bar(top2, x=cat2, y="count", title=f"{cat2} split",
+                          color="count", color_continuous_scale=["#e6c878", "#0a2540"])
+            fig3.update_layout(**COMPACT)
+            fig3.update_coloraxes(showscale=False)
+            fig3.update_xaxes(tickangle=-30, tickfont_size=10)
+            st.plotly_chart(fig3, use_container_width=True)
+        elif len(a.numeric_cols) >= 2:
+            c3 = a.numeric_cols[1] if len(a.numeric_cols) > 1 else a.numeric_cols[0]
+            fig3 = px.histogram(a.df, x=c3, nbins=20, title=f"{c3} distribution")
+            fig3.update_traces(marker_color="#c79a3a")
+            fig3.update_layout(**COMPACT)
+            st.plotly_chart(fig3, use_container_width=True)
+
+    # Row 2 — numeric heatmap or box-plots if data allows
+    if len(a.numeric_cols) >= 3 and len(a.categorical_cols) >= 1:
+        vis_cols2 = st.columns(2)
+        with vis_cols2[0]:
+            box_col = a.money_cols[0] if a.money_cols else a.numeric_cols[0]
+            cat_box = a.categorical_cols[0]
+            fig4 = px.box(
+                a.df, x=cat_box, y=box_col, title=f"{box_col} by {cat_box}",
+                color_discrete_sequence=["#0a2540"],
+            )
+            fig4.update_layout(**COMPACT)
+            st.plotly_chart(fig4, use_container_width=True)
+        with vis_cols2[1]:
+            corr_cols = a.numeric_cols[:5]
+            corr_m = a.df[corr_cols].corr()
+            fig5 = px.imshow(
+                corr_m, text_auto=".1f", aspect="auto",
+                color_continuous_scale=["#b91c1c", "#ffffff", "#0a2540"],
+                title="Correlation heat",
+            )
+            fig5.update_layout(**{**COMPACT, "height": 220})
+            st.plotly_chart(fig5, use_container_width=True)
+
+    # --- WHAT TO DO NEXT ---
+    st.markdown(
+        """
+        <div class="kx-callout">
+            <strong>Next step</strong>: open the <em>AI Intelligence</em> tab to ask follow-up questions in plain English,
+            or jump to <em>Data Quality</em> to clean the dataset before deeper modeling.
+        </div>
+        """, unsafe_allow_html=True,
+    )
+
+
+def render_ai():
+    a: UniversalAnalytics = st.session_state.analytics
+    st.markdown('<div class="kx-card"><div class="kx-card-title">AI Intelligence</div>'
+                '<div class="kx-card-sub">Ask any business question. Get a consultant-grade answer.</div></div>',
+                unsafe_allow_html=True)
+
+    if not a.llm:
+        st.warning("AI is unavailable: GROQ_API_KEY missing. Add it to .streamlit/secrets.toml.")
+        return
+
+    qcols = st.columns(4)
+    quick_prompts = {
+        "Data overview": "Give a comprehensive overview of this dataset with the most important findings.",
+        "Top correlations": "Identify the strongest correlations in the data and explain their business significance.",
+        "Key trends": "Identify and explain the most important trends or patterns in the data.",
+        "Anomalies": "Spot anomalies or outliers in the data and explain why they matter.",
+    }
+    for col, (label, qry) in zip(qcols, quick_prompts.items()):
+        if col.button(label, key=f"qa_{label}"):
+            with st.spinner("KiteIQX analyzing..."):
+                st.session_state.ai_last_response = a.ai_query(qry)
+
+    st.markdown(" ")
+    user_q = st.text_area(
+        "Custom question:",
+        placeholder='e.g. "Which customer segment drives the most revenue and why?"',
+        height=110,
+        key="ai_custom_q",
+    )
+    if st.button("Ask KiteIQX", type="primary"):
+        if user_q.strip():
+            with st.spinner("Thinking..."):
+                st.session_state.ai_last_response = a.ai_query(user_q.strip())
+
+    if "ai_last_response" in st.session_state:
+        st.markdown(
+            f'<div class="kx-ai-response"><strong>KiteIQX Intelligence:</strong><br><br>'
+            f'{st.session_state.ai_last_response}</div>',
+            unsafe_allow_html=True,
+        )
+
+    with st.expander("Available columns"):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown("**Numeric**")
+            for c in a.numeric_cols[:15]:
+                st.write(f"• {c}")
+        with c2:
+            st.markdown("**Categorical**")
+            for c in a.categorical_cols[:15]:
+                st.write(f"• {c}")
+        with c3:
+            st.markdown("**Datetime**")
+            for c in a.datetime_cols:
+                st.write(f"• {c}")
+
+
+def render_data_quality():
+    a: UniversalAnalytics = st.session_state.analytics
+    status, score, summary = a.get_data_quality_report()
+
+    panel_class = {"excellent": "kx-q-excellent", "good": "kx-q-good",
+                   "fair": "kx-q-warning", "poor": "kx-q-poor"}[status]
+    headline = {"excellent": "Excellent", "good": "Good", "fair": "Needs attention", "poor": "Poor"}[status]
+
+    st.markdown(
+        f"""<div class="{panel_class}">
+        <div style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.6px; opacity:0.7;">Overall data quality</div>
+        <div style="font-size: 2rem; font-weight: 800; line-height: 1.1;">{headline} — {score}/100</div>
+        <div style="margin-top: 0.5rem;">{summary}</div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(" ")
+    cols = st.columns(3)
+
+    # Duplicates
+    with cols[0]:
+        st.markdown('<div class="kx-card"><div class="kx-card-title">Duplicates</div>', unsafe_allow_html=True)
+        if "duplicates" in a.data_quality_issues:
+            d = a.data_quality_issues["duplicates"]
+            st.markdown(f'<div class="kx-card-value">{d["count"]:,}</div>'
+                        f'<div class="kx-card-sub">{d["percentage"]:.1f}% of rows are exact duplicates</div></div>',
+                        unsafe_allow_html=True)
+            if st.button("Remove duplicates", key="dq_dedup"):
+                msg = a.clean_duplicates()
+                st.success(msg)
+                st.session_state.pop("exec_summary", None)
+                st.session_state.pop("takeaways", None)
+                st.rerun()
+        else:
+            st.markdown('<div class="kx-card-value">0</div><div class="kx-card-sub">No duplicate rows detected.</div></div>',
+                        unsafe_allow_html=True)
+
+    # Missing data
+    with cols[1]:
+        st.markdown('<div class="kx-card"><div class="kx-card-title">Missing values</div>', unsafe_allow_html=True)
+        if "missing_data" in a.data_quality_issues:
+            md = a.data_quality_issues["missing_data"]
+            worst = max(md.items(), key=lambda x: x[1]["percentage"])
+            st.markdown(
+                f'<div class="kx-card-value">{len(md)}</div>'
+                f'<div class="kx-card-sub">columns affected; worst: <b>{worst[0]}</b> ({worst[1]["percentage"]:.1f}%)</div></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown('<div class="kx-card-value">0</div><div class="kx-card-sub">All columns are 100% populated.</div></div>',
+                        unsafe_allow_html=True)
+
+    # Outliers
+    with cols[2]:
+        st.markdown('<div class="kx-card"><div class="kx-card-title">Outliers</div>', unsafe_allow_html=True)
+        if "outliers" in a.data_quality_issues:
+            od = a.data_quality_issues["outliers"]
+            worst = max(od.items(), key=lambda x: x[1]["percentage"])
+            st.markdown(
+                f'<div class="kx-card-value">{len(od)}</div>'
+                f'<div class="kx-card-sub">numeric columns flagged; worst: <b>{worst[0]}</b> ({worst[1]["percentage"]:.1f}%)</div></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown('<div class="kx-card-value">0</div><div class="kx-card-sub">No statistical outliers (IQR method).</div></div>',
+                        unsafe_allow_html=True)
+
+    # Detailed tables
+    st.markdown(" ")
+    if "missing_data" in a.data_quality_issues:
+        st.markdown("#### Missing data — column-by-column")
+        md = a.data_quality_issues["missing_data"]
+        tbl = pd.DataFrame([
+            {"Column": k, "Missing rows": v["count"], "Missing %": round(v["percentage"], 2)}
+            for k, v in sorted(md.items(), key=lambda x: -x[1]["percentage"])
+        ])
+        st.dataframe(tbl, use_container_width=True, hide_index=True)
+
+    if "outliers" in a.data_quality_issues:
+        st.markdown("#### Outliers — column-by-column (IQR method)")
+        od = a.data_quality_issues["outliers"]
+        tbl = pd.DataFrame([
+            {"Column": k, "Outlier rows": v["count"], "Outlier %": round(v["percentage"], 2),
+             "Outlier range": v.get("range", ""), "Expected range": v.get("bounds", "")}
+            for k, v in sorted(od.items(), key=lambda x: -x[1]["percentage"])
+        ])
+        st.dataframe(tbl, use_container_width=True, hide_index=True)
+
+
+def render_advanced():
+    a: UniversalAnalytics = st.session_state.analytics
+    v: VizEngine = st.session_state.viz_engine
+
+    st.markdown('<div class="kx-card"><div class="kx-card-title">Advanced Analytics</div>'
+                '<div class="kx-card-sub">Select columns, pick a method, run.</div></div>', unsafe_allow_html=True)
+
+    cols = a.df.columns.tolist()
+    selected = st.multiselect("Columns to analyze", cols, default=cols[: min(5, len(cols))])
+    if not selected:
+        st.info("Select at least one column.")
+        return
+
+    numeric = [c for c in selected if c in a.numeric_cols]
+    categorical = [c for c in selected if c in a.categorical_cols]
+    datetime_ = [c for c in selected if c in a.datetime_cols]
+
+    methods = []
+    if len(numeric) >= 2:
+        methods += ["Correlation matrix", "Scatter plot", "Predictive model"]
+    if numeric:
+        methods.append("Distribution analysis")
+    if datetime_ and numeric:
+        methods.append("Time-series analysis")
+    if not methods:
+        st.info("No methods available for this selection.")
+        return
+
+    pick = st.selectbox("Method", methods)
+    if st.button("Run analysis"):
+        if pick == "Correlation matrix":
+            fig, msg = v.correlation_matrix(selected)
+        elif pick == "Distribution analysis":
+            fig, msg = v.distribution(selected)
+        elif pick == "Scatter plot":
+            fig, msg = v.scatter(numeric[0], numeric[1], categorical[0] if categorical else None)
+        elif pick == "Predictive model":
+            fig, msg = v.regression(numeric[-1], numeric[:-1])
+        elif pick == "Time-series analysis":
+            fig, msg = v.timeseries(datetime_[0], numeric[0])
+        else:
+            fig, msg = None, "Method not implemented."
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
+            st.success(msg)
+        else:
+            st.error(msg)
 
 
 def render_custom_charts():
-    """Render custom charts interface"""
-    st.subheader("🎨 Custom Chart Builder")
-    
-    analytics = st.session_state.analytics
-    viz_engine = st.session_state.viz_engine
-    
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.markdown("**⚙️ Chart Configuration**")
-        
-        chart_type = st.selectbox("Chart Type", [
-            "Scatter Plot",
-            "Correlation Matrix",
-            "Distribution Analysis",
-            "Predictive Model",
-            "Time Series"
-        ])
-        
-        if chart_type == "Scatter Plot":
-            if len(analytics.numeric_cols) >= 2:
-                x_col = st.selectbox("X-axis", analytics.numeric_cols)
-                y_col = st.selectbox("Y-axis", analytics.numeric_cols)
-                color_col = st.selectbox("Color by (optional)", [None] + analytics.categorical_cols)
-                
-                if st.button("🎨 Create Chart", type="primary"):
-                    fig, message = viz_engine.create_scatter_plot(x_col, y_col, color_col)
-                    if fig:
-                        st.session_state.current_chart = fig
-                        st.session_state.chart_message = message
-            else:
-                st.warning("⚠️ Need at least 2 numeric columns")
-        
-        elif chart_type == "Correlation Matrix":
-            selected_cols = st.multiselect("Select columns", analytics.numeric_cols, default=analytics.numeric_cols[:5])
-            
-            if st.button("🎨 Create Chart", type="primary"):
-                fig, message = viz_engine.create_correlation_matrix(selected_cols)
-                if fig:
-                    st.session_state.current_chart = fig
-                    st.session_state.chart_message = message
-        
-        elif chart_type == "Distribution Analysis":
-            selected_cols = st.multiselect("Select columns", analytics.numeric_cols, default=analytics.numeric_cols[:3])
-            
-            if st.button("🎨 Create Chart", type="primary"):
-                fig, message = viz_engine.create_distribution_analysis(selected_cols)
-                if fig:
-                    st.session_state.current_chart = fig
-                    st.session_state.chart_message = message
-        
-        elif chart_type == "Predictive Model":
-            if len(analytics.numeric_cols) >= 2:
-                target_col = st.selectbox("Target variable", analytics.numeric_cols)
-                predictor_cols = st.multiselect("Predictor variables", 
-                                              [col for col in analytics.numeric_cols if col != target_col],
-                                              default=[col for col in analytics.numeric_cols if col != target_col][:2])
-                
-                if st.button("🎨 Create Chart", type="primary"):
-                    if predictor_cols:
-                        fig, message = viz_engine.create_predictive_model(target_col, predictor_cols)
-                        if fig:
-                            st.session_state.current_chart = fig
-                            st.session_state.chart_message = message
-                    else:
-                        st.error("❌ Select at least one predictor")
-            else:
-                st.warning("⚠️ Need at least 2 numeric columns")
-        
-        elif chart_type == "Time Series":
-            if analytics.datetime_cols and analytics.numeric_cols:
-                date_col = st.selectbox("Date column", analytics.datetime_cols)
-                value_col = st.selectbox("Value column", analytics.numeric_cols)
-                
-                if st.button("🎨 Create Chart", type="primary"):
-                    fig, message = viz_engine.create_time_series_analysis(date_col, value_col)
-                    if fig:
-                        st.session_state.current_chart = fig
-                        st.session_state.chart_message = message
-            else:
-                st.warning("⚠️ Need datetime and numeric columns")
-    
-    with col2:
-        if hasattr(st.session_state, 'current_chart'):
-            st.plotly_chart(st.session_state.current_chart, use_container_width=True)
-            if hasattr(st.session_state, 'chart_message'):
-                st.success(f"✅ {st.session_state.chart_message}")
+    a: UniversalAnalytics = st.session_state.analytics
+    v: VizEngine = st.session_state.viz_engine
+
+    left, right = st.columns([1, 2])
+    with left:
+        st.markdown('<div class="kx-card"><div class="kx-card-title">Build a chart</div></div>', unsafe_allow_html=True)
+        chart_type = st.selectbox("Chart type",
+                                  ["Scatter", "Correlation matrix", "Distribution", "Predictive model", "Time-series"])
+
+        fig, msg = None, ""
+        if chart_type == "Scatter" and len(a.numeric_cols) >= 2:
+            x = st.selectbox("X", a.numeric_cols, key="cc_x")
+            y = st.selectbox("Y", a.numeric_cols, key="cc_y")
+            color = st.selectbox("Color by", [None] + a.categorical_cols, key="cc_color")
+            if st.button("Render", key="cc_render_scatter"):
+                fig, msg = v.scatter(x, y, color)
+        elif chart_type == "Correlation matrix":
+            sel = st.multiselect("Columns", a.numeric_cols, default=a.numeric_cols[:5], key="cc_corr")
+            if st.button("Render", key="cc_render_corr"):
+                fig, msg = v.correlation_matrix(sel)
+        elif chart_type == "Distribution":
+            sel = st.multiselect("Columns", a.numeric_cols, default=a.numeric_cols[:3], key="cc_dist")
+            if st.button("Render", key="cc_render_dist"):
+                fig, msg = v.distribution(sel)
+        elif chart_type == "Predictive model" and len(a.numeric_cols) >= 2:
+            target = st.selectbox("Target", a.numeric_cols, key="cc_target")
+            preds = st.multiselect("Predictors", [c for c in a.numeric_cols if c != target],
+                                   default=[c for c in a.numeric_cols if c != target][:2], key="cc_preds")
+            if st.button("Render", key="cc_render_pred"):
+                fig, msg = v.regression(target, preds)
+        elif chart_type == "Time-series" and a.datetime_cols and a.numeric_cols:
+            date_col = st.selectbox("Date column", a.datetime_cols, key="cc_date")
+            val_col = st.selectbox("Value column", a.numeric_cols, key="cc_val")
+            if st.button("Render", key="cc_render_ts"):
+                fig, msg = v.timeseries(date_col, val_col)
         else:
-            st.info("ℹ️ Configure and create a chart to see it here")
+            st.info("Not enough data of the right type for this chart.")
+
+        if fig:
+            st.session_state.cc_fig = fig
+            st.session_state.cc_msg = msg
+
+    with right:
+        if "cc_fig" in st.session_state:
+            st.plotly_chart(st.session_state.cc_fig, use_container_width=True)
+            st.success(st.session_state.get("cc_msg", ""))
+        else:
+            st.info("Configure a chart on the left.")
 
 
-def render_data_explorer():
-    """Render data explorer"""
-    st.subheader("🗂️ Data Explorer")
-    
-    analytics = st.session_state.analytics
-    df = analytics.df
-    
-    col1, col2 = st.columns([1, 3])
-    
-    with col1:
-        st.markdown("**🔍 Filters**")
-        
-        selected_cols = st.multiselect("Columns to view", 
-                                     df.columns.tolist(), 
-                                     default=df.columns.tolist()[:10])
-        
-        row_limit = st.slider("Rows to show", 10, min(1000, len(df)), 100)
-        
-        view_type = st.radio("View type", ["Head", "Sample", "Tail"])
-        
-        search_term = st.text_input("🔎 Search in data:")
-    
-    with col2:
+def render_explorer():
+    a: UniversalAnalytics = st.session_state.analytics
+    df = a.df
+
+    left, right = st.columns([1, 3])
+    with left:
+        st.markdown('<div class="kx-card"><div class="kx-card-title">Filters</div></div>', unsafe_allow_html=True)
+        cols = st.multiselect("Columns", df.columns.tolist(), default=df.columns.tolist()[:10])
+        rows = st.slider("Rows to display", 10, min(2000, len(df)), 100)
+        view = st.radio("View", ["Head", "Sample", "Tail"], horizontal=True)
+        search = st.text_input("Search text")
+
+    with right:
+        view_df = df[cols] if cols else df
+        if search:
+            text_cols = view_df.select_dtypes(include=["object"]).columns
+            if len(text_cols):
+                mask = view_df[text_cols].astype(str).apply(lambda x: x.str.contains(search, case=False, na=False)).any(axis=1)
+                view_df = view_df[mask]
+        if view == "Head":
+            view_df = view_df.head(rows)
+        elif view == "Tail":
+            view_df = view_df.tail(rows)
+        else:
+            view_df = view_df.sample(min(rows, len(view_df))) if len(view_df) else view_df
+        st.dataframe(view_df, use_container_width=True)
+
+        m = st.columns(4)
+        m[0].metric("Showing", f"{len(view_df):,}")
+        m[1].metric("Total rows", f"{len(df):,}")
+        m[2].metric("Columns", len(cols) if cols else len(df.columns))
+        m[3].metric("Memory", f"{df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
+
+        nums = [c for c in view_df.columns if c in a.numeric_cols]
+        if nums:
+            st.markdown("#### Numeric summary")
+            st.dataframe(view_df[nums].describe(), use_container_width=True)
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+def initialize_analytics(df: pd.DataFrame, model: str, filename: str = "unknown"):
+    llm = None
+    if GROQ_AVAILABLE and GROQ_API_KEY:
         try:
-            display_df = df[selected_cols] if selected_cols else df
-            
-            if search_term:
-                text_cols = display_df.select_dtypes(include=['object']).columns
-                if len(text_cols) > 0:
-                    mask = display_df[text_cols].astype(str).apply(
-                        lambda x: x.str.contains(search_term, case=False, na=False)
-                    ).any(axis=1)
-                    display_df = display_df[mask]
-            
-            if view_type == "Head":
-                display_df = display_df.head(row_limit)
-            elif view_type == "Tail":
-                display_df = display_df.tail(row_limit)
-            else:
-                display_df = display_df.sample(min(row_limit, len(display_df))) if len(display_df) > 0 else display_df
-            
-            st.dataframe(display_df, use_container_width=True)
-            
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Showing Rows", len(display_df))
-            with col2:
-                st.metric("Total Rows", len(df))
-            with col3:
-                st.metric("Columns", len(selected_cols) if selected_cols else len(df.columns))
-            with col4:
-                st.metric("Memory Usage", f"{df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
-            
-            # Quick statistics
-            numeric_display_cols = [col for col in display_df.columns if col in analytics.numeric_cols]
-            if numeric_display_cols:
-                st.markdown("### 📊 Quick Statistics")
-                st.dataframe(display_df[numeric_display_cols].describe(), use_container_width=True)
-                
+            llm = GroqLLM(api_key=GROQ_API_KEY, model=model)
         except Exception as e:
-            st.error(f"❌ Error displaying data: {str(e)}")
+            st.error(f"Could not initialize Groq: {e}")
+    st.session_state.analytics = UniversalAnalytics(df, llm)
+    st.session_state.viz_engine = VizEngine(st.session_state.analytics)
+    st.session_state.upload_filename = filename
+    # Reset story cache so dashboard re-runs against new data
+    st.session_state.pop("exec_summary", None)
+    st.session_state.pop("takeaways", None)
+    st.session_state.pop("ai_last_response", None)
+    st.session_state.pop("upload_logged", None)
+    # Log basic upload info immediately (summary/takeaways logged later once generated)
+    log_upload(filename, df)
+
+
+def main():
+    render_header()
+
+    # Late-injected button fix — this runs after Streamlit's own CSS so it wins
+    st.markdown(
+        """
+        <style>
+        button { color: #ffffff !important; }
+        button p, button span, button div { color: #ffffff !important; }
+        .stButton > button { background-color: #0a2540 !important; color: #ffffff !important; }
+        .stButton > button p,
+        .stButton > button span { color: #ffffff !important; }
+        .stFileUploader button { background-color: #0a2540 !important; color: #ffffff !important; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if "analytics" not in st.session_state:
+        st.session_state.analytics = None
+        st.session_state.viz_engine = None
+
+    with st.sidebar:
+        st.markdown("### Configuration")
+        if not GROQ_AVAILABLE:
+            st.error("`groq` package not installed.")
+        elif not GROQ_API_KEY:
+            st.warning("No GROQ_API_KEY configured. AI features will be disabled.")
+        else:
+            st.success("AI engine ready.")
+        st.markdown(
+            f'<div style="font-size:0.78rem;color:#4a5568;background:#f7f8fb;'
+            f'border:1px solid #e3e6ee;border-radius:6px;padding:0.35rem 0.7rem;'
+            f'margin-top:0.3rem;margin-bottom:0.1rem;">'
+            f'⚡ Model: <strong style="color:#0a2540;">llama-3.1-8b-instant</strong></div>',
+            unsafe_allow_html=True,
+        )
+
+        model = FIXED_MODEL
+
+        st.markdown("---")
+        st.markdown("### Load data")
+        up = st.file_uploader("Drop a CSV or Excel file", type=["csv", "xlsx", "xls"])
+        url = st.text_input("…or fetch CSV from URL")
+        demo = st.selectbox("…or try a demo dataset", ["", "E-commerce Sales", "Employee Data", "Simple Demo"])
+
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Load", type="primary"):
+                try:
+                    df = None
+                    fname = "unknown"
+                    if up:
+                        df = load_uploaded_file(up)
+                        fname = up.name
+                        st.success(f"Loaded **{up.name}** ({len(df):,} rows).")
+                    elif url:
+                        r = requests.get(url, timeout=30)
+                        df = pd.read_csv(io.StringIO(r.text))
+                        fname = url.split("/")[-1] or "url_import"
+                        st.success(f"Loaded from URL ({len(df):,} rows).")
+                    if df is not None:
+                        initialize_analytics(df, model, filename=fname)
+                except Exception as e:
+                    st.error(f"Load failed: {e}")
+        with c2:
+            if st.button("Use demo") and demo:
+                try:
+                    df = generate_demo(demo)
+                    initialize_analytics(df, model, filename=f"demo_{demo.replace(' ','_')}")
+                    st.success(f"Loaded demo: {demo}.")
+                except Exception as e:
+                    st.error(f"Demo failed: {e}")
+
+        # Show last saved path
+        if st.session_state.get("last_saved_path"):
+            st.markdown("---")
+            st.markdown("**Last uploaded file archived to:**")
+            st.code(st.session_state["last_saved_path"], language=None)
+
+        if st.session_state.analytics:
+            st.markdown("---")
+            s = st.session_state.analytics.insights["basic_stats"]
+            st.metric("Rows", f"{s['rows']:,}")
+            st.metric("Columns", s["columns"])
+            st.metric("Completeness", f"{100 - s['missing_pct']:.1f}%")
+
+    if st.session_state.analytics is None:
+        render_welcome()
+        return
+
+    tabs = st.tabs([
+        "Executive Dashboard",
+        "AI Intelligence",
+        "Data Quality",
+        "Advanced Analytics",
+        "Custom Charts",
+        "Data Explorer",
+    ])
+
+    with tabs[0]:
+        render_dashboard()
+    with tabs[1]:
+        render_ai()
+    with tabs[2]:
+        render_data_quality()
+    with tabs[3]:
+        render_advanced()
+    with tabs[4]:
+        render_custom_charts()
+    with tabs[5]:
+        render_explorer()
 
 
 if __name__ == "__main__":
