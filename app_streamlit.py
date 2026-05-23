@@ -225,7 +225,7 @@ footer { visibility: hidden; }
     margin-bottom: 0.25rem;
 }
 .kx-mark {
-    width: 48px; height: 48px;
+    width: 58px; height: 58px;
     background: var(--kite-navy);
     color: var(--kite-gold);
     border-radius: 8px;
@@ -234,7 +234,7 @@ footer { visibility: hidden; }
     letter-spacing: -1px;
 }
 .kx-wordmark {
-    font-size: 2.2rem; font-weight: 700;
+    font-size: 2.6rem; font-weight: 700;
     color: #0a2540 !important;
     letter-spacing: -0.3px;
 }
