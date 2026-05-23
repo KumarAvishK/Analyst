@@ -391,16 +391,16 @@ iframe {
     padding-top: 0.25rem;
 }
 .kx-mark {
-    width: 38px; height: 38px;
+    width: 48px; height: 48px;
     background: var(--kite-navy);
     color: var(--kite-gold);
-    border-radius: 8px;
+    border-radius: 10px;
     display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 1.4rem;
+    font-weight: 700; font-size: 1.8rem;
     letter-spacing: -1px;
 }
 .kx-wordmark {
-    font-size: 1.6rem; font-weight: 700;
+    font-size: 2.2rem; font-weight: 700;
     color: #0a2540 !important;
     letter-spacing: -0.3px;
 }
@@ -1125,9 +1125,9 @@ def render_welcome():
     st.markdown(
         """
         <div class="kx-hero">
-            <h2>Upload your data, get a CEO-ready narrative in minutes.</h2>
-            <p>Built for non-technical leaders. Drop a CSV or Excel file and KiteIQX will surface the
-            <span class="kx-hero-accent">three insights that matter</span>, audit data quality, and let you ask follow-up
+            <h2 style="color:#ffffff;font-weight:700;margin:0 0 0.5rem 0;">Upload your data, get a CEO-ready narrative in minutes.</h2>
+            <p style="color:#ffffff;font-size:1.05rem;line-height:1.6;margin:0;">Built for non-technical leaders. Drop a CSV or Excel file and KiteIQX will surface the
+            <span style="color:#c79a3a;font-weight:700;">three insights that matter</span>, audit data quality, and let you ask follow-up
             questions in plain English.</p>
         </div>
         """,
@@ -1166,16 +1166,17 @@ def render_dashboard():
     if "monetary" in ins:
         monetary_line = (
             f' Total tracked value across the dataset is '
-            f'<span class="kx-hero-accent">${ins["monetary"]["total"]:,.0f}</span>.'
+            f'<span style="color:#c79a3a;font-weight:700;">${ins["monetary"]["total"]:,.0f}</span>.'
         )
     st.markdown(
         f"""
         <div class="kx-hero">
-            <h2>Business Story</h2>
-            <p>KiteIQX has analysed <span class="kx-hero-accent">{record_str}</span> records across
-            <span class="kx-hero-accent">{col_str}</span> dimensions
-            ({ins['column_types']['numeric']} numeric · {ins['column_types']['categorical']} categorical · {ins['column_types']['datetime']} time-based)
-            with <span class="kx-hero-accent">{quality_pct:.1f}%</span> completeness.{monetary_line}
+            <h2 style="color:#ffffff;font-weight:700;margin:0 0 0.5rem 0;">Business Story</h2>
+            <p style="color:#ffffff;font-size:1.05rem;line-height:1.6;margin:0;">
+            KiteIQX has analysed <span style="color:#c79a3a;font-weight:700;">{record_str}</span> records across
+            <span style="color:#c79a3a;font-weight:700;">{col_str}</span> dimensions
+            (<span style="color:#ffffff;">{ ins['column_types']['numeric'] } numeric · { ins['column_types']['categorical'] } categorical · { ins['column_types']['datetime'] } time-based</span>)
+            with <span style="color:#c79a3a;font-weight:700;">{quality_pct:.1f}%</span> completeness.{monetary_line}
             The AI narrative and takeaways below reflect what the numbers actually say about your business.</p>
         </div>
         """,
