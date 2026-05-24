@@ -1439,20 +1439,20 @@ from pathlib import Path as _Path
 # ============================================================
 # CONSULTANT PRESENTATION ENGINE (integrated)
 # ============================================================
-"""
-Consultant Engine — the analytical core.
-=========================================
-This is NOT a stat-miner. It reasons about a metric the way a BCG/McKinsey
-analyst would: decompose a change across dimensions, localize the driver,
-recurse into it, and quantify each segment's contribution to the total move.
-
-Math computes every number. The LLM (elsewhere) only narrates proven findings.
-
-Key objects:
-  - StoryContext   : what kind of story the data supports (detect at runtime)
-  - DriverAnalysis : decomposition tree for a metric change
-  - Finding        : one proven, quantified insight + the visual that proves it
-"""
+#
+# Consultant Engine — the analytical core.
+# =========================================
+# This is NOT a stat-miner. It reasons about a metric the way a BCG/McKinsey
+# analyst would: decompose a change across dimensions, localize the driver,
+# recurse into it, and quantify each segment's contribution to the total move.
+#
+# Math computes every number. The LLM (elsewhere) only narrates proven findings.
+#
+# Key objects:
+#   - StoryContext   : what kind of story the data supports (detect at runtime)
+#   - DriverAnalysis : decomposition tree for a metric change
+#   - Finding        : one proven, quantified insight + the visual that proves it
+#
 
 
 # ============================================================
@@ -1845,15 +1845,15 @@ def derive_findings(analytics):
     return ctx, findings
 
 
-"""
-Consultant agent layer — sits on top of consultant.py (the math).
-  - CHART_CATALOG          : what each chart type needs to be valid
-  - validate_chart_choice  : the guardrail (rules) — can this finding support this chart?
-  - propose_visual         : LLM proposes chart+action-title; rules validate; fallback if rejected
-  - draft_storyboard       : LLM sequences findings into a narrative + gives reasoning
-  - narrate_finding        : LLM writes consultant prose from PROVEN facts only
-All LLM calls degrade gracefully to deterministic fallbacks when no llm present.
-"""
+#
+# Consultant agent layer — sits on top of consultant.py (the math).
+#   - CHART_CATALOG          : what each chart type needs to be valid
+#   - validate_chart_choice  : the guardrail (rules) — can this finding support this chart?
+#   - propose_visual         : LLM proposes chart+action-title; rules validate; fallback if rejected
+#   - draft_storyboard       : LLM sequences findings into a narrative + gives reasoning
+#   - narrate_finding        : LLM writes consultant prose from PROVEN facts only
+# All LLM calls degrade gracefully to deterministic fallbacks when no llm present.
+#
 
 
 # ============================================================
@@ -2103,18 +2103,18 @@ def _fallback_narrative(f):
     return f"{ff.get('rows','')} records across {ff.get('cols','')} fields at {ff.get('completeness','')} completeness."
 
 
-"""
-Consultant deck builder — charts, storyboard styles, visual flow, pptx render.
-Depends on consultant.py (findings) + agent.py (visual/story choices).
-
-Storyboard STYLES (each defines a narrative ordering of finding-roles AND a
-flow label shown on the storyline slide):
-  - SCR              Situation → Complication → Root-cause chain → Implication → Action
-  - Pyramid          Answer first → supporting drivers → evidence
-  - Deep-dive        Headline → progressive drill-down (situation→root→interaction)
-  - Chronological    How it evolved over time → where it stands → what to do
-  - Comparison       Benchmark segments side-by-side → leader/laggard → action
-"""
+#
+# Consultant deck builder — charts, storyboard styles, visual flow, pptx render.
+# Depends on consultant.py (findings) + agent.py (visual/story choices).
+#
+# Storyboard STYLES (each defines a narrative ordering of finding-roles AND a
+# flow label shown on the storyline slide):
+#   - SCR              Situation → Complication → Root-cause chain → Implication → Action
+#   - Pyramid          Answer first → supporting drivers → evidence
+#   - Deep-dive        Headline → progressive drill-down (situation→root→interaction)
+#   - Chronological    How it evolved over time → where it stands → what to do
+#   - Comparison       Benchmark segments side-by-side → leader/laggard → action
+#
 from pptx import Presentation
 from pptx.util import Inches as In, Pt
 from pptx.dml.color import RGBColor
@@ -2441,10 +2441,10 @@ for _nm, _v in STORYBOARD_STYLES.items():
     _vv = dict(_v); _vv["__name"] = _nm; __STYLES[_nm] = _vv
 
 
-"""
-Consultant deck assembly — spec builder, pptx slide renderer, HTML preview.
-Ties: consultant.py (findings) + agent.py (visual/story/narration) + pm_charts.py (charts).
-"""
+#
+# Consultant deck assembly — spec builder, pptx slide renderer, HTML preview.
+# Ties: consultant.py (findings) + agent.py (visual/story/narration) + pm_charts.py (charts).
+#
 from pptx import Presentation
 from pptx.util import Inches as In, Pt
 
