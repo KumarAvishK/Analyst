@@ -1434,1077 +1434,1571 @@ import re as _re
 from datetime import datetime as _dt
 from pathlib import Path as _Path
 
-# ============================================================
-# PRESENTATION MAKER  v3  — story-driven, Gamma-style decks
-# ============================================================
-# Pure-Python (python-pptx only). No Node, no LibreOffice needed.
-#  - StoryMiner       : mines a ranked pool of business "stories" from data
-#  - build_deck_spec  : turns chosen stories + chat answers into a slide spec
-#  - render_html_slide: faithful HTML/CSS mockup of each slide (in-app preview)
-#  - build_pptx       : renders the (edited) spec to .pptx in Gamma style
-#  - render_presentation_maker : the conversational agent + preview/edit UI
-
-
-try:
-    from pptx import Presentation as _Prs
-    from pptx.util import Inches as _In, Pt as _Pt
-    from pptx.dml.color import RGBColor as _RGB
-    from pptx.enum.text import PP_ALIGN as _AL, MSO_ANCHOR as _AN
-    from pptx.enum.shapes import MSO_SHAPE as _SH
-    from pptx.chart.data import CategoryChartData as _CD
-    from pptx.enum.chart import (XL_CHART_TYPE as _CT, XL_LEGEND_POSITION as _LEG,
-                                 XL_LABEL_POSITION as _LP)
-    from pptx.oxml.ns import qn as _qn
-    PPTX_OK = True
-except ImportError:
-    PPTX_OK = False
-
-
-# ── theme palettes ──────────────────────────────────────────
-
-DECK_THEMES = {
-    "Vibrant": {
-        "primary": "4C1D95", "primary2": "6D28D9", "accent": "F97316",
-        "blue": "2563EB", "green": "059669", "pink": "DB2777",
-        "ink": "1E1B4B", "soft": "64748B", "surface": "F5F3FF",
-        "surface2": "EFF6FF", "surface3": "FEF3E8", "line": "E5E7EB",
-    },
-    "KiteIQX Brand": {
-        "primary": "0A2540", "primary2": "14304F", "accent": "C79A3A",
-        "blue": "2F5C8A", "green": "2C7A5B", "pink": "9A6A3D",
-        "ink": "1A2333", "soft": "4A5568", "surface": "F7F8FB",
-        "surface2": "EEF3F8", "surface3": "FBF6EC", "line": "E3E6EE",
-    },
-    "Slate Pro": {
-        "primary": "1E293B", "primary2": "334155", "accent": "0EA5E9",
-        "blue": "2563EB", "green": "059669", "pink": "E11D48",
-        "ink": "0F172A", "soft": "64748B", "surface": "F1F5F9",
-        "surface2": "EFF6FF", "surface3": "FEF2F2", "line": "E2E8F0",
-    },
-}
-
-DECK_FONTS = {
-    "Arial + Calibri  (Bold, modern)": {"header": "Arial", "body": "Calibri"},
-    "Georgia + Calibri  (Editorial)":  {"header": "Georgia", "body": "Calibri"},
-    "Trebuchet + Calibri  (Friendly)": {"header": "Trebuchet MS", "body": "Calibri"},
-}
-
-# glyphs that render reliably in Calibri/Arial via Office + LibreOffice
-GLY = {
-    "up": "↑", "down": "↓", "target": "◎", "star": "★", "trophy": "🏆",
-    "chart": "📊", "growth": "📈", "people": "👥", "bulb": "💡", "woman": "♀",
-    "man": "♂", "money": "₹", "check": "✓", "diamond": "◆", "ring": "◑",
-    "alert": "▲", "flag": "⚑",
-}
 
 
 # ============================================================
-# STORY MINER
+# CONSULTANT PRESENTATION ENGINE (integrated)
 # ============================================================
+"""
+Consultant Engine — the analytical core.
+=========================================
+This is NOT a stat-miner. It reasons about a metric the way a BCG/McKinsey
+analyst would: decompose a change across dimensions, localize the driver,
+recurse into it, and quantify each segment's contribution to the total move.
 
-class StoryMiner:
-    """Extracts a ranked pool of candidate business stories from a dataframe."""
+Math computes every number. The LLM (elsewhere) only narrates proven findings.
+
+Key objects:
+  - StoryContext   : what kind of story the data supports (detect at runtime)
+  - DriverAnalysis : decomposition tree for a metric change
+  - Finding        : one proven, quantified insight + the visual that proves it
+"""
+
+
+# ============================================================
+# 0. SMALL-CELL GUARDS / CONFIG
+# ============================================================
+MIN_CELL_ROWS = 8        # don't trust a segment with fewer rows than this
+MIN_CONTRIB_PCT = 12.0   # a driver must explain at least this % of the move
+MAX_TREE_DEPTH = 3       # metric -> dim1 -> dim2 -> dim3
+TOP_DIM_CARD = 6         # max categories to chart
+
+
+def _fmt(v):
+    av = abs(v)
+    if av >= 1_000_000: return f"{v/1_000_000:.2f}M"
+    if av >= 1_000:     return f"{v/1_000:.1f}K"
+    if av == int(av):   return f"{int(v):,}"
+    return f"{v:,.2f}"
+
+
+def _signpct(v):
+    return f"{v:+.1f}%"
+
+
+# ============================================================
+# 1. STORY CONTEXT  — detect what's possible at runtime
+# ============================================================
+class StoryContext:
+    """Inspects the dataframe and decides which story modes are viable."""
 
     def __init__(self, analytics):
         self.a = analytics
         self.df = analytics.df
-        self.stories = []
-        self._mine()
+        self.modes = []           # e.g. ['driver_time', 'concentration', 'correlation']
+        self.time_col = None
+        self.has_two_periods = False
+        self.metrics = []         # numeric value columns worth tracking
+        self.dims = []            # categorical dimensions worth slicing by
+        self._detect()
 
-    def _fmt(self, v):
-        av = abs(v)
-        if av >= 1_000_000: return f"{v/1_000_000:.2f}M"
-        if av >= 1_000:     return f"{v/1_000:.1f}K"
-        if av >= 1:         return f"{v:,.0f}" if v == int(v) else f"{v:,.2f}"
-        return f"{v:.2f}"
-
-    def _money(self, v):
-        return "₹" + self._fmt(v)
-
-    def _pretty(self, col):
-        return str(col).replace("_", " ").strip().title()
-
-    def _add(self, **kw):
-        kw.setdefault("chart", None)
-        kw.setdefault("icon", GLY["chart"])
-        self.stories.append(kw)
-
-    def _mine(self):
+    def _detect(self):
         a, df = self.a, self.df
-        n = len(df)
-        if n == 0:
-            return
 
-        # 1) Segment leaders (top categorical value, by count)
-        for ci, cat in enumerate(a.categorical_cols[:4]):
-            vc = df[cat].value_counts()
+        # metrics = money first, else generic numerics (exclude id-like & scores)
+        self.metrics = list(a.money_cols) or [
+            c for c in a.numeric_cols
+            if c not in getattr(a, "id_cols", []) and df[c].nunique() > 5
+        ]
+        self.metrics = self.metrics[:4]
+
+        # dims = categoricals with a sane cardinality (2..40 distinct)
+        self.dims = [
+            c for c in a.categorical_cols
+            if 2 <= df[c].nunique() <= 40
+        ]
+
+        # time?
+        if a.datetime_cols:
+            self.time_col = a.datetime_cols[0]
+            t = pd.to_datetime(df[self.time_col], errors="coerce").dropna()
+            if len(t):
+                span_days = (t.max() - t.min()).days
+                # need at least ~2 comparable periods
+                self.has_two_periods = span_days >= 60
+
+        # decide modes
+        if self.time_col and self.has_two_periods and self.metrics:
+            self.modes.append("driver_time")     # YoY / period-over-period decomposition
+        if self.dims and self.metrics:
+            self.modes.append("driver_mix")      # which segment drives the metric (no time needed)
+        if self.dims:
+            self.modes.append("concentration")
+        if len(a.numeric_cols) >= 2:
+            self.modes.append("correlation")
+        if not self.modes:
+            self.modes.append("profile")
+
+    def describe(self):
+        """Human sentence describing what the agent can build."""
+        bits = []
+        if "driver_time" in self.modes:
+            bits.append(f"a **driver story** — track *{self.metrics[0]}* over time and find what's moving it across {', '.join(self.dims[:3]) or 'segments'}")
+        elif "driver_mix" in self.modes:
+            bits.append(f"a **mix story** — break down *{self.metrics[0]}* to see which {', '.join(self.dims[:2])} segments drive it")
+        if "concentration" in self.modes and "driver_time" not in self.modes:
+            bits.append("a **concentration story** — where activity clusters and the risk that creates")
+        if "correlation" in self.modes:
+            bits.append("a **relationship story** — which metrics move together")
+        if self.modes == ["profile"]:
+            bits.append("a **profile overview** — the shape of the data (limited story angles without segments or a metric)")
+        primary = ("driver" if "driver_time" in self.modes else
+                   "mix" if "driver_mix" in self.modes else
+                   "concentration" if "concentration" in self.modes else "profile")
+        return primary, bits
+
+
+# ============================================================
+# 2. CONTRIBUTION ANALYSIS  — the heart of the "why"
+# ============================================================
+def _period_split(df, time_col):
+    """Split rows into two comparable periods (recent vs prior)."""
+    t = pd.to_datetime(df[time_col], errors="coerce")
+    d = df.assign(_t=t).dropna(subset=["_t"]).sort_values("_t")
+    if len(d) < 2 * MIN_CELL_ROWS:
+        return None, None, None, None
+    # try year-over-year if >= 2 calendar years, else split by median date
+    years = d["_t"].dt.year
+    if years.nunique() >= 2:
+        recent_year = years.max()
+        prior_year = sorted(years.unique())[-2]
+        recent = d[years == recent_year]
+        prior = d[years == prior_year]
+        label = f"{prior_year}→{recent_year}"
+    else:
+        mid = d["_t"].quantile(0.5)
+        prior = d[d["_t"] <= mid]
+        recent = d[d["_t"] > mid]
+        label = "prior vs recent period"
+    if len(recent) < MIN_CELL_ROWS or len(prior) < MIN_CELL_ROWS:
+        return None, None, None, None
+    return prior, recent, label, "_t"
+
+
+def contribution_by_dim(prior, recent, metric, dim):
+    """
+    For a metric change between two periods, compute each segment's
+    contribution to the TOTAL change. Returns a ranked table.
+    contribution_pts = (seg_recent - seg_prior) / total_change * 100
+    """
+    p = prior.groupby(dim)[metric].sum()
+    r = recent.groupby(dim)[metric].sum()
+    segs = sorted(set(p.index) | set(r.index))
+    total_prior = float(p.sum())
+    total_recent = float(r.sum())
+    total_change = total_recent - total_prior
+    rows = []
+    for s in segs:
+        pv = float(p.get(s, 0.0)); rv = float(r.get(s, 0.0))
+        chg = rv - pv
+        # row counts for small-cell guard
+        n_recent = int((recent[dim] == s).sum())
+        n_prior = int((prior[dim] == s).sum())
+        contrib_pts = (chg / total_change * 100) if total_change else 0.0
+        seg_growth = (chg / pv * 100) if pv else (100.0 if rv else 0.0)
+        rows.append({
+            "segment": str(s), "prior": pv, "recent": rv, "change": chg,
+            "contrib_pct": contrib_pts, "seg_growth": seg_growth,
+            "n_recent": n_recent, "n_prior": n_prior,
+        })
+    tbl = pd.DataFrame(rows)
+    if len(tbl):
+        tbl["abs_contrib"] = tbl["contrib_pct"].abs()
+        tbl = tbl.sort_values("abs_contrib", ascending=False).reset_index(drop=True)
+    return tbl, total_prior, total_recent, total_change
+
+
+def mix_by_dim(df, metric, dim):
+    """No-time fallback: which segments dominate the metric level (share)."""
+    g = df.groupby(dim)[metric].sum().sort_values(ascending=False)
+    tot = float(g.sum()) or 1.0
+    rows = [{"segment": str(k), "value": float(v), "share_pct": float(v) / tot * 100,
+             "n": int((df[dim] == k).sum())} for k, v in g.items()]
+    return pd.DataFrame(rows)
+
+
+# ============================================================
+# 3. DRIVER ANALYSIS  — recursive decomposition tree
+# ============================================================
+class DriverNode:
+    def __init__(self, dim, segment, contrib_pct, change, prior, recent, n_recent, depth):
+        self.dim = dim; self.segment = segment
+        self.contrib_pct = contrib_pct; self.change = change
+        self.prior = prior; self.recent = recent; self.n_recent = n_recent
+        self.depth = depth
+        self.children = []          # deeper DriverNodes
+        self.table = None           # contribution table at this level (for charting)
+
+
+def build_driver_tree(df, metric, dims, time_col):
+    """
+    Decompose metric change top-down. At each level pick the dimension whose
+    top segment explains the most of the change, recurse into that segment.
+    Returns (root_summary, tree_nodes, period_label).
+    """
+    prior, recent, label, tcol = _period_split(df, time_col)
+    if prior is None:
+        return None
+
+    total_prior = float(prior[metric].sum())
+    total_recent = float(recent[metric].sum())
+    total_change = total_recent - total_prior
+    total_pct = (total_change / total_prior * 100) if total_prior else 0.0
+
+    root = {
+        "metric": metric, "period": label,
+        "prior": total_prior, "recent": total_recent,
+        "change": total_change, "pct": total_pct,
+        "direction": "down" if total_change < 0 else "up",
+    }
+
+    # recursive walk, narrowing the data to the dominant segment each level
+    def walk(sub_prior, sub_recent, avail_dims, depth, parent_change):
+        if depth >= MAX_TREE_DEPTH or not avail_dims or parent_change == 0:
+            return []
+        best = None
+        for d in avail_dims:
+            tbl, _, _, chg = contribution_by_dim(sub_prior, sub_recent, metric, d)
+            if not len(tbl):
+                continue
+            top = tbl.iloc[0]
+            # guards: enough rows, meaningful contribution, same direction as parent move
+            if top["n_recent"] < MIN_CELL_ROWS:
+                continue
+            if top["abs_contrib"] < MIN_CONTRIB_PCT:
+                continue
+            score = top["abs_contrib"]
+            if best is None or score > best["score"]:
+                best = {"dim": d, "tbl": tbl, "top": top, "score": score}
+        if not best:
+            return []
+        top = best["top"]; d = best["dim"]
+        node = DriverNode(d, top["segment"], top["contrib_pct"], top["change"],
+                          top["prior"], top["recent"], int(top["n_recent"]), depth)
+        node.table = best["tbl"]
+        # recurse into the winning segment with remaining dims
+        np_ = sub_prior[sub_prior[d] == top["segment"]]
+        nr_ = sub_recent[sub_recent[d] == top["segment"]]
+        remaining = [x for x in avail_dims if x != d]
+        node.children = walk(np_, nr_, remaining, depth + 1, top["change"])
+        return [node]
+
+    tree = walk(prior, recent, dims, 0, total_change)
+    return {"root": root, "tree": tree}
+
+
+# ============================================================
+# 4. FINDINGS  — proven facts + the visual that proves them
+# ============================================================
+class Finding:
+    """A proven, quantified insight. Carries the FACTS the LLM will narrate."""
+    def __init__(self, ftype, role, facts, chart=None, importance=0.0):
+        self.ftype = ftype          # 'situation','root_cause','interaction','mix','concentration','correlation','profile'
+        self.role = role            # narrative role in SCR arc
+        self.facts = facts          # dict of computed numbers (ground truth)
+        self.chart = chart          # chart spec dict or None
+        self.importance = importance
+        self.narrative = None       # filled later by LLM (or fallback)
+
+    def fact_brief(self):
+        """Compact, unambiguous fact string handed to the LLM for narration."""
+        return "; ".join(f"{k}={v}" for k, v in self.facts.items())
+
+
+def _chart_from_contrib(tbl, metric, dim, kind="waterfall"):
+    t = tbl.head(TOP_DIM_CARD)
+    return {
+        "kind": kind, "title": f"{metric} change by {dim}",
+        "labels": t["segment"].tolist(),
+        "values": [round(float(x), 2) for x in t["change"].tolist()],
+        "secondary": [round(float(x), 1) for x in t["contrib_pct"].tolist()],
+        "metric": metric, "dim": dim,
+    }
+
+
+def derive_findings(analytics):
+    """
+    Top-level entry: run the consultant loop and return a ranked list of Findings.
+    Math-only here; narration added later.
+    """
+    ctx = StoryContext(analytics)
+    df = analytics.df
+    findings = []
+
+    primary, _ = ctx.describe()
+
+    # ---------- DRIVER (time) ----------
+    if "driver_time" in ctx.modes:
+        metric = ctx.metrics[0]
+        res = build_driver_tree(df, metric, ctx.dims, ctx.time_col)
+        if res:
+            root = res["root"]; tree = res["tree"]
+            # Situation: the headline movement
+            findings.append(Finding(
+                "situation", "situation",
+                {"metric": metric, "period": root["period"],
+                 "prior": _fmt(root["prior"]), "recent": _fmt(root["recent"]),
+                 "change": _fmt(root["change"]), "pct": _signpct(root["pct"]),
+                 "direction": root["direction"]},
+                chart={"kind": "trend_period", "title": f"{metric} — {root['period']}",
+                       "labels": [root["period"].split("→")[0] if "→" in root["period"] else "Prior",
+                                  root["period"].split("→")[-1] if "→" in root["period"] else "Recent"],
+                       "values": [round(root["prior"], 2), round(root["recent"], 2)],
+                       "metric": metric},
+                importance=100 + abs(root["pct"]),
+            ))
+            # Root cause chain: walk the tree
+            def emit(nodes, parent_seg=None):
+                for nd in nodes:
+                    role = "root_cause" if nd.depth == 0 else "interaction"
+                    seg_path = nd.segment if parent_seg is None else f"{parent_seg} × {nd.segment}"
+                    facts = {
+                        "metric": metric, "dimension": nd.dim, "segment": seg_path,
+                        "segment_change": _fmt(nd.change),
+                        "contribution_pct": f"{nd.contrib_pct:.0f}% of the total move",
+                        "prior": _fmt(nd.prior), "recent": _fmt(nd.recent),
+                        "rows": nd.n_recent,
+                    }
+                    findings.append(Finding(
+                        "root_cause" if nd.depth == 0 else "interaction",
+                        role, facts,
+                        chart=_chart_from_contrib(nd.table, metric, nd.dim, kind="waterfall"),
+                        importance=90 - nd.depth * 10 + abs(nd.contrib_pct) / 10,
+                    ))
+                    emit(nd.children, seg_path)
+            emit(tree)
+
+    # ---------- MIX (no time) ----------
+    if "driver_mix" in ctx.modes and "driver_time" not in ctx.modes:
+        metric = ctx.metrics[0]
+        for d in ctx.dims[:2]:
+            tbl = mix_by_dim(df, metric, d)
+            if len(tbl) < 2:
+                continue
+            top = tbl.iloc[0]
+            findings.append(Finding(
+                "mix", "root_cause",
+                {"metric": metric, "dimension": d, "segment": top["segment"],
+                 "value": _fmt(top["value"]), "share": f"{top['share_pct']:.0f}%"},
+                chart={"kind": "bar", "title": f"{metric} by {d}",
+                       "labels": tbl.head(TOP_DIM_CARD)["segment"].tolist(),
+                       "values": [round(float(x), 2) for x in tbl.head(TOP_DIM_CARD)["value"].tolist()],
+                       "metric": metric, "dim": d},
+                importance=60 + top["share_pct"] / 2,
+            ))
+
+    # ---------- CONCENTRATION ----------
+    if "concentration" in ctx.modes:
+        for d in ctx.dims[:2]:
+            vc = df[d].value_counts()
             if len(vc) < 2:
                 continue
-            top, top_n = vc.index[0], int(vc.iloc[0])
-            share = top_n / n * 100
-            self._add(
-                kind="segment_leader", group=cat,
-                headline=f"{top} leads {self._pretty(cat)}",
-                detail=f"'{top}' is the largest {self._pretty(cat)} segment with {top_n:,} records ({share:.1f}% of all rows).",
-                stat_value=f"{share:.1f}%", stat_label=f"share — {top}",
-                score=share + (8 if ci == 0 else 0), icon=GLY["people"],
-                chart={"kind": "bar", "title": f"{self._pretty(cat)} breakdown",
-                       "labels": [str(x) for x in vc.head(6).index.tolist()],
-                       "values": [float(x) for x in vc.head(6).values.tolist()]},
-            )
-            # concentration risk
-            if share >= 45:
-                self._add(
-                    kind="concentration", group=cat,
-                    headline=f"{self._pretty(cat)} is concentrated",
-                    detail=f"A single {self._pretty(cat)} ('{top}') accounts for {share:.1f}% of activity — a concentration worth monitoring.",
-                    stat_value=f"{share:.1f}%", stat_label="in one segment",
-                    score=share + 6, icon=GLY["alert"],
-                    chart={"kind": "pie", "title": f"{self._pretty(cat)} concentration",
+            top_share = vc.iloc[0] / len(df) * 100
+            if top_share >= 40:
+                findings.append(Finding(
+                    "concentration", "complication",
+                    {"dimension": d, "segment": str(vc.index[0]),
+                     "share": f"{top_share:.0f}%", "rows": int(vc.iloc[0])},
+                    chart={"kind": "pie", "title": f"{d} concentration",
                            "labels": [str(x) for x in vc.head(5).index.tolist()],
-                           "values": [float(x) for x in vc.head(5).values.tolist()]},
-                )
+                           "values": [float(x) for x in vc.head(5).values.tolist()],
+                           "dim": d},
+                    importance=40 + top_share / 4,
+                ))
 
-        # 2) Money / metric leaders by segment
-        metric_cols = (a.money_cols or a.numeric_cols)[:3]
-        for m in metric_cols:
-            if m not in df.columns:
-                continue
-            ismoney = m in a.money_cols
-            for cat in a.categorical_cols[:2]:
-                grp = df.groupby(cat)[m].sum().sort_values(ascending=False)
-                if len(grp) < 2:
-                    continue
-                top, topv = grp.index[0], float(grp.iloc[0])
-                tot = float(grp.sum()) or 1
-                share = topv / tot * 100
-                val = self._money(topv) if ismoney else self._fmt(topv)
-                self._add(
-                    kind="metric_extreme", group=cat, metric=m,
-                    headline=f"{top} drives {self._pretty(m)}",
-                    detail=f"'{top}' generates {val} of {self._pretty(m)} — {share:.1f}% of the total across {self._pretty(cat)}.",
-                    stat_value=val, stat_label=f"{self._pretty(m)} · {top}",
-                    score=share + 4, icon=GLY["money"] if ismoney else GLY["chart"],
-                    chart={"kind": "bar", "title": f"{self._pretty(m)} by {self._pretty(cat)}",
-                           "labels": [str(x) for x in grp.head(6).index.tolist()],
-                           "values": [round(float(x), 2) for x in grp.head(6).values.tolist()]},
-                )
-
-        # 3) Time trends
-        if a.datetime_cols and (a.money_cols or a.numeric_cols):
-            dc = a.datetime_cols[0]
-            vcol = a.money_cols[0] if a.money_cols else a.numeric_cols[0]
-            ts = df[[dc, vcol]].dropna().sort_values(dc)
-            if len(ts) >= 6:
-                series = ts.set_index(dc)[vcol]
-                try:
-                    idx = series.index.to_period("M")
-                    res = series.groupby(idx).sum()
-                    res.index = res.index.to_timestamp()
-                    if len(res) < 3:
-                        idxw = series.index.to_period("W")
-                        res = series.groupby(idxw).sum()
-                        res.index = res.index.to_timestamp()
-                except Exception:
-                    res = series
-                res = res[res != 0]
-                if len(res) >= 3:
-                    first, last = float(res.iloc[0]), float(res.iloc[-1])
-                    growth = (last - first) / abs(first) * 100 if first else 0
-                    peak_i = res.values.argmax()
-                    peak_label = str(res.index[peak_i])[:10]
-                    peak_val = float(res.iloc[peak_i])
-                    direction = "grew" if growth >= 0 else "declined"
-                    # cap to a readable number of periods
-                    if len(res) > 14:
-                        res = res.tail(12)
-                    self._add(
-                        kind="trend", metric=vcol,
-                        headline=f"{self._pretty(vcol)} {direction} over time",
-                        detail=f"{self._pretty(vcol)} {direction} {abs(growth):.0f}% across the period; peak of {self._fmt(peak_val)} around {peak_label}.",
-                        stat_value=f"{growth:+.0f}%", stat_label=f"{self._pretty(vcol)} change",
-                        score=abs(growth) + 12, icon=GLY["growth"],
-                        chart={"kind": "line", "title": f"{self._pretty(vcol)} over time",
-                               "labels": [str(x)[:7] for x in res.index.tolist()],
-                               "values": [round(float(x), 2) for x in res.values.tolist()]},
-                    )
-
-        # 4) Correlations
-        nums = a.numeric_cols
-        if len(nums) >= 2:
-            try:
-                corr = df[nums].corr().abs()
-                best = (0, None, None)
-                for i in range(len(nums)):
-                    for j in range(i + 1, len(nums)):
-                        r = corr.iloc[i, j]
-                        if r == r and r > best[0] and r < 0.999:
-                            best = (r, nums[i], nums[j])
-                if best[1] and best[0] >= 0.4:
-                    r, c1, c2 = best
-                    self._add(
-                        kind="correlation", metric=f"{c1}~{c2}",
-                        headline=f"{self._pretty(c1)} tracks {self._pretty(c2)}",
-                        detail=f"{self._pretty(c1)} and {self._pretty(c2)} move together (correlation {r:.2f}) — a lever worth testing operationally.",
-                        stat_value=f"{r:.2f}", stat_label="correlation",
-                        score=r * 60, icon=GLY["target"],
-                        chart=None,
-                    )
-            except Exception:
-                pass
-
-        # 5) Metric averages (numeric profile)
-        for m in nums[:3]:
-            s = df[m].dropna()
-            if len(s) < 5:
-                continue
-            self._add(
-                kind="metric_avg", metric=m,
-                headline=f"Typical {self._pretty(m)}",
-                detail=f"{self._pretty(m)} averages {self._fmt(float(s.mean()))} (ranging {self._fmt(float(s.min()))} to {self._fmt(float(s.max()))}).",
-                stat_value=self._fmt(float(s.mean())), stat_label=f"avg {self._pretty(m)}",
-                score=8, icon=GLY["diamond"],
-            )
-
-        # 6) Volume framing (always available)
-        comp = 100 - a.insights["basic_stats"]["missing_pct"]
-        self._add(
-            kind="volume",
-            headline="Dataset at a glance",
-            detail=f"{n:,} records across {len(df.columns)} fields, {comp:.0f}% complete — a solid base for analysis.",
-            stat_value=f"{n:,}", stat_label="records analysed",
-            score=5, icon=GLY["chart"],
-        )
-
-        # rank
-        self.stories.sort(key=lambda s: -s.get("score", 0))
-        for i, s in enumerate(self.stories):
-            s["id"] = f"story_{i}"
-
-    def top(self, k=10):
-        return self.stories[:k]
-
-
-# ============================================================
-# DECK SPEC BUILDER
-# ============================================================
-
-def _kpi_pool(analytics, miner):
-    """Build up to 4 KPI cards for the dashboard slide."""
-    a = analytics
-    ins = a.insights
-    b = ins["basic_stats"]
-    th_keys = ["primary2", "blue", "green", "accent"]
-    kpis = []
-    if "monetary" in ins:
-        m = ins["monetary"]
-        kpis.append({"glyph": GLY["money"], "label": "TOTAL VALUE",
-                     "value": "₹" + miner._fmt(m["total"]), "sub": f"avg ₹{miner._fmt(m['avg'])}/record", "ck": "primary2"})
-        kpis.append({"glyph": GLY["chart"], "label": "AVG / RECORD",
-                     "value": "₹" + miner._fmt(m["avg"]), "sub": "per row", "ck": "blue"})
-    kpis.append({"glyph": GLY["people"], "label": "RECORDS",
-                 "value": f"{b['rows']:,}", "sub": "rows analysed", "ck": "green"})
-    kpis.append({"glyph": GLY["diamond"], "label": "DIMENSIONS",
-                 "value": str(b["columns"]),
-                 "sub": f"{ins['column_types']['numeric']} num · {ins['column_types']['categorical']} cat", "ck": "accent"})
-    comp = 100 - b["missing_pct"]
-    kpis.append({"glyph": GLY["check"], "label": "COMPLETENESS",
-                 "value": f"{comp:.0f}%", "sub": "non-null values", "ck": "primary2"})
-    # de-dup color keys across first 4
-    for i, k in enumerate(kpis[:4]):
-        k["ck"] = th_keys[i % 4]
-    return kpis[:4]
-
-
-def _story_to_insight(s):
-    return {"glyph": s["icon"], "head": s["headline"], "stat": s.get("stat_value", ""),
-            "text": s["detail"]}
-
-
-def build_deck_spec(analytics, miner, chosen_stories, answers, theme_name, font_name):
-    """Assemble a slide spec from chosen stories + chat answers. LLM polishes text."""
-    a = analytics
-    title = answers.get("title") or "Business Intelligence Story"
-    subtitle = answers.get("subtitle") or f"{len(analytics.df):,} records · {answers.get('goal','executive review')}"
-    goal = answers.get("goal", "executive review")
-    audience = answers.get("audience", "leadership")
-    emphasis = answers.get("emphasis", "")
-
-    exec_summary = st.session_state.get("exec_summary") or a._fallback_summary()
-    qstatus, qscore, qsummary = a.get_data_quality_report()
-
-    # Optional LLM framing of title/subtitle/recommendation/closing
-    domain, rec, closing = title, [], "Turn these insights into action."
-    if a.llm:
+    # ---------- CORRELATION ----------
+    if "correlation" in ctx.modes:
+        nums = analytics.numeric_cols
         try:
-            heads = "; ".join(s["headline"] + " (" + s.get("stat_value", "") + ")" for s in chosen_stories[:8])
-            prompt = (
-                f"Audience: {audience}. Goal: {goal}. Emphasis: {emphasis or 'none'}.\n"
-                f"Dataset summary: {exec_summary[:300]}\n"
-                f"Selected findings: {heads}\n\n"
-                "Return ONLY JSON (no fences): "
-                '{"title":"<=6 word deck title","subtitle":"<=12 word subtitle",'
-                '"recommendations":["action 1","action 2","action 3"],'
-                '"closing":"one strong closing line"}'
-            )
-            raw = _re.sub(r"```json|```", "", a.llm.predict(prompt, max_tokens=420)).strip()
-            p = _json.loads(raw)
-            title = p.get("title", title)
-            subtitle = p.get("subtitle", subtitle)
-            rec = p.get("recommendations", []) or []
-            closing = p.get("closing", closing)
+            corr = df[nums].corr().abs()
+            best = (0, None, None)
+            for i in range(len(nums)):
+                for j in range(i + 1, len(nums)):
+                    r = corr.iloc[i, j]
+                    if r == r and 0.4 <= r < 0.999 and r > best[0]:
+                        best = (r, nums[i], nums[j])
+            if best[1]:
+                r, c1, c2 = best
+                findings.append(Finding(
+                    "correlation", "evidence",
+                    {"a": c1, "b": c2, "r": f"{r:.2f}"},
+                    chart={"kind": "scatter", "title": f"{c1} vs {c2}",
+                           "labels": [], "values": [],
+                           "x": [float(v) for v in df[c1].dropna().head(200).tolist()],
+                           "y": [float(v) for v in df[c2].dropna().head(200).tolist()],
+                           "xlab": c1, "ylab": c2},
+                    importance=30 + r * 20,
+                ))
         except Exception:
             pass
-    if not rec:
-        rec = [s["detail"] for s in chosen_stories[:3]]
 
-    th = DECK_THEMES[theme_name]
-    slides = []
+    # ---------- PROFILE (always, low priority) ----------
+    b = analytics.insights["basic_stats"]
+    findings.append(Finding(
+        "profile", "context",
+        {"rows": f"{b['rows']:,}", "cols": b["columns"],
+         "completeness": f"{100 - b['missing_pct']:.0f}%"},
+        importance=5,
+    ))
 
-    # 1 — Title
-    slides.append({"kind": "title", "title": title, "subtitle": subtitle,
-                   "date": _dt.now().strftime("%B %Y")})
-
-    # 2 — Dashboard (hero infographic)
-    kpis = _kpi_pool(a, miner)
-    hero = chosen_stories[0] if chosen_stories else None
-    hero_chart = next((s["chart"] for s in chosen_stories if s.get("chart")), None)
-    top_two = " ".join(s["headline"] + f" ({s.get('stat_value','')})." for s in chosen_stories[:2])
-    banner = top_two or exec_summary[:160]
-    insights = [_story_to_insight(s) for s in chosen_stories[1:5]] or [_story_to_insight(s) for s in chosen_stories[:3]]
-    dash_footer = (rec[0] if rec else "Review the detailed stories that follow.")
-    slides.append({"kind": "dashboard", "title": (goal.title() + " — Snapshot"),
-                   "banner": banner, "kpis": kpis, "chart": hero_chart,
-                   "insights": insights[:4],
-                   "footer": dash_footer})
-
-    # 3..N — one slide per remaining chosen story that has a chart
-    used = set()
-    for s in chosen_stories:
-        if s.get("chart") and s["id"] not in used:
-            sib = [_story_to_insight(x) for x in chosen_stories
-                   if x["id"] != s["id"] and x.get("group") == s.get("group")][:3]
-            if not sib:
-                sib = [{"glyph": s["icon"], "head": "Why it matters", "stat": s.get("stat_value", ""),
-                        "text": s["detail"]}]
-            slides.append({"kind": "story_chart", "title": s["headline"].upper(),
-                           "banner": s["detail"], "chart": s["chart"],
-                           "stat_value": s.get("stat_value", ""), "stat_label": s.get("stat_label", ""),
-                           "insights": sib, "footer": ""})
-            used.add(s["id"])
-        if len([sl for sl in slides if sl["kind"] == "story_chart"]) >= 4:
-            break
-
-    # big-stat slide for a headline number without a chart
-    nostat = next((s for s in chosen_stories if not s.get("chart")), None)
-    if nostat:
-        slides.append({"kind": "big_stat", "title": nostat["headline"].upper(),
-                       "stat_value": nostat.get("stat_value", ""), "stat_label": nostat.get("stat_label", ""),
-                       "body": nostat["detail"]})
-
-    # Recommendations
-    slides.append({"kind": "takeaways", "title": "What To Do Next",
-                   "items": rec[:3]})
-
-    # Data quality
-    slides.append({"kind": "quality", "title": "Data Quality", "score": qscore,
-                   "status": qstatus, "summary": qsummary.replace("**", "").replace("  \n", " · ")})
-
-    # Closing
-    slides.append({"kind": "closing", "message": closing, "date": _dt.now().strftime("%B %Y")})
-
-    return {"meta": {"title": title, "subtitle": subtitle, "theme": theme_name,
-                     "font": font_name, "date": _dt.now().strftime("%B %Y")},
-            "slides": slides}
+    findings.sort(key=lambda f: -f.importance)
+    return ctx, findings
 
 
-# ── pptx drawing helpers (validated in prototype) ───────────
+"""
+Consultant agent layer — sits on top of consultant.py (the math).
+  - CHART_CATALOG          : what each chart type needs to be valid
+  - validate_chart_choice  : the guardrail (rules) — can this finding support this chart?
+  - propose_visual         : LLM proposes chart+action-title; rules validate; fallback if rejected
+  - draft_storyboard       : LLM sequences findings into a narrative + gives reasoning
+  - narrate_finding        : LLM writes consultant prose from PROVEN facts only
+All LLM calls degrade gracefully to deterministic fallbacks when no llm present.
+"""
 
-def _hx(h):
-    h = h.lstrip("#"); return _RGB(int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
 
-def _soft_shadow(shp):
+# ============================================================
+# VISUAL CATALOG  — finding-shape → permissible charts
+# ============================================================
+# Each entry: requirements the finding/data must meet for the chart to be valid.
+CHART_CATALOG = {
+    "waterfall":   {"needs": ["change_decomposition"], "desc": "bridge from prior to recent showing each segment's +/- contribution"},
+    "bar_ranked":  {"needs": ["segments", "values"],    "desc": "sorted bars, driver highlighted, rest muted"},
+    "line":        {"needs": ["time_or_ordered"],       "desc": "trend over an ordered/time axis"},
+    "area":        {"needs": ["time_or_ordered"],       "desc": "trend with filled area, good for one series + threshold"},
+    "donut":       {"needs": ["segments", "values"],    "desc": "share of whole when one segment dominates"},
+    "stacked100":  {"needs": ["segments", "values"],    "desc": "100% stacked composition"},
+    "scatter":     {"needs": ["two_numeric"],           "desc": "relationship between two metrics with fit line"},
+    "slope":       {"needs": ["two_period_segments"],   "desc": "prior→recent slope per segment (mix shift)"},
+    "dumbbell":    {"needs": ["two_period_segments"],   "desc": "prior vs recent dots per segment"},
+    "big_number":  {"needs": [],                        "desc": "one or few headline numbers, no chart"},
+    "kpi_grid":    {"needs": [],                        "desc": "2x2 grid of headline numbers"},
+}
+
+# which charts each finding-type is ALLOWED to use (rules guardrail)
+FINDING_CHART_WHITELIST = {
+    "situation":     {"waterfall", "line", "area", "bar_ranked", "big_number", "kpi_grid"},
+    "root_cause":    {"waterfall", "bar_ranked", "slope", "dumbbell"},
+    "interaction":   {"waterfall", "bar_ranked", "slope", "dumbbell"},
+    "mix":           {"bar_ranked", "donut", "stacked100", "slope"},
+    "concentration": {"donut", "stacked100", "bar_ranked"},
+    "correlation":   {"scatter"},
+    "profile":       {"kpi_grid", "big_number"},
+    "action":        {"big_number"},
+}
+
+
+def _finding_capabilities(finding):
+    """What chart-requirements does this finding's data actually satisfy?"""
+    caps = set()
+    ch = finding.chart or {}
+    k = ch.get("kind", "")
+    facts = finding.facts
+    # decomposition: came from a contribution table (has +/- changes by segment)
+    if finding.ftype in ("situation", "root_cause", "interaction") and k in ("waterfall", "trend_period", "bar"):
+        caps.add("change_decomposition")
+    if ch.get("labels") and ch.get("values"):
+        caps.add("segments"); caps.add("values")
+    if k in ("line", "area", "trend_period"):
+        caps.add("time_or_ordered")
+    if k == "scatter" and ch.get("x") and ch.get("y"):
+        caps.add("two_numeric")
+    if finding.ftype in ("root_cause", "interaction", "mix"):
+        # we have prior & recent per segment from the contribution table
+        caps.add("two_period_segments")
+    return caps
+
+
+def validate_chart_choice(finding, chart_kind):
+    """RULES guardrail. Returns (ok, reason)."""
+    if chart_kind not in CHART_CATALOG:
+        return False, f"unknown chart '{chart_kind}'"
+    allowed = FINDING_CHART_WHITELIST.get(finding.ftype, set())
+    if chart_kind not in allowed and CHART_CATALOG[chart_kind]["needs"]:
+        return False, f"{chart_kind} not suitable for a '{finding.ftype}' finding"
+    caps = _finding_capabilities(finding)
+    for need in CHART_CATALOG[chart_kind]["needs"]:
+        if need not in caps:
+            return False, f"data can't support {chart_kind} (missing {need})"
+    return True, "ok"
+
+
+def _default_chart_for(finding):
+    """Deterministic fallback chart kind per finding-type."""
+    return {
+        "situation": "waterfall" if (finding.chart or {}).get("kind") in ("waterfall",) else "line",
+        "root_cause": "waterfall",
+        "interaction": "waterfall",
+        "mix": "bar_ranked",
+        "concentration": "donut",
+        "correlation": "scatter",
+        "profile": "kpi_grid",
+        "action": "big_number",
+    }.get(finding.ftype, "bar_ranked")
+
+
+# ============================================================
+# VISUAL PROPOSAL  — LLM proposes, rules validate
+# ============================================================
+def propose_visual(finding, llm, audience="leadership"):
+    """
+    Returns {chart_kind, action_title, validated, reason}.
+    LLM proposes; if invalid, fall back to the rule default (also validated).
+    """
+    allowed = sorted(FINDING_CHART_WHITELIST.get(finding.ftype, {"bar_ranked"}))
+    fallback_kind = _default_chart_for(finding)
+    ok, _ = validate_chart_choice(finding, fallback_kind)
+    if not ok:
+        # last-resort safe pick
+        for k in allowed:
+            if validate_chart_choice(finding, k)[0]:
+                fallback_kind = k; break
+
+    if not llm:
+        return {"chart_kind": fallback_kind,
+                "action_title": _fallback_title(finding),
+                "validated": True, "reason": "no-llm fallback"}
+
+    prompt = (
+        f"You are a McKinsey visual-design lead. A finding has these PROVEN facts:\n"
+        f"  {finding.fact_brief()}\n"
+        f"Finding type: {finding.ftype}. Audience: {audience}.\n"
+        f"Allowed chart types for this finding: {allowed}.\n"
+        f"Chart meanings: " + "; ".join(f"{k}={CHART_CATALOG[k]['desc']}" for k in allowed) + "\n\n"
+        "Pick the ONE chart that proves this point most clearly, and write an ACTION TITLE "
+        "(a full sentence stating the finding, e.g. 'New York drove 92% of the YoY decline' — "
+        "NOT a label like 'Sales by State'). Use the real numbers from the facts.\n"
+        "Return ONLY JSON: {\"chart\":\"<one of allowed>\",\"title\":\"<action title>\"}"
+    )
+    try:
+        raw = _re.sub(r"```json|```", "", llm.predict(prompt, max_tokens=200)).strip()
+        p = _json.loads(raw)
+        kind = p.get("chart", fallback_kind)
+        title = p.get("title") or _fallback_title(finding)
+        ok, reason = validate_chart_choice(finding, kind)
+        if not ok:
+            kind = fallback_kind
+            reason = f"LLM pick rejected ({reason}); used {fallback_kind}"
+        else:
+            reason = "LLM proposed, validated"
+        return {"chart_kind": kind, "action_title": title, "validated": True, "reason": reason}
+    except Exception as e:
+        return {"chart_kind": fallback_kind, "action_title": _fallback_title(finding),
+                "validated": True, "reason": f"llm-error fallback ({e})"}
+
+
+def _fallback_title(f):
+    ff = f.facts
+    if f.ftype == "situation":
+        return f"{ff.get('metric','Metric').title()} moved {ff.get('pct','')} ({ff.get('period','')})"
+    if f.ftype in ("root_cause", "interaction"):
+        return f"{ff.get('segment','A segment')} drove {ff.get('contribution_pct','the change')}"
+    if f.ftype == "mix":
+        return f"{ff.get('segment','Top segment')} leads {ff.get('metric','the metric')} at {ff.get('share','')}"
+    if f.ftype == "concentration":
+        return f"{ff.get('segment','One segment')} is {ff.get('share','')} of the total"
+    if f.ftype == "correlation":
+        return f"{ff.get('a','')} and {ff.get('b','')} move together (r={ff.get('r','')})"
+    if f.ftype == "profile":
+        return f"{ff.get('rows','')} records across {ff.get('cols','')} fields, {ff.get('completeness','')} complete"
+    return "Key finding"
+
+
+# ============================================================
+# STORYBOARD AGENT  — LLM drafts ordered narrative + reasoning
+# ============================================================
+def draft_storyboard(findings, framing, llm):
+    """
+    framing = {decision, audience, takeaway}
+    Returns {order: [finding_index...], reasoning: str, arc: [labels]}.
+    LLM sequences; rules ensure situation-first & action-last sanity.
+    """
+    # Build a compact menu for the LLM
+    menu = []
+    for i, f in enumerate(findings):
+        menu.append(f"{i}: [{f.ftype}/{f.role}] {f.fact_brief()[:120]}")
+
+    fallback_order = _scr_order(findings)
+    if not llm:
+        return {"order": fallback_order,
+                "reasoning": "Sequenced as Situation → Complication → Root-cause chain → "
+                             "supporting evidence → context (no AI; default consultant arc).",
+                "arc": [findings[i].role for i in fallback_order]}
+
+    prompt = (
+        "You are a McKinsey engagement manager building a board deck.\n"
+        f"Decision the audience must make: {framing.get('decision','(unspecified)')}\n"
+        f"Audience: {framing.get('audience','leadership')}\n"
+        f"The one thing they must leave knowing: {framing.get('takeaway','(unspecified)')}\n\n"
+        "Available findings (index: [type/role] facts):\n" + "\n".join(menu) + "\n\n"
+        "Sequence these into a tight narrative using the pyramid principle "
+        "(answer first, then support). Drop weak/redundant findings. "
+        "Aim for 5-8 slides. Order should build a cause→effect→action story.\n"
+        "Return ONLY JSON: {\"order\":[indices in slide order],"
+        "\"reasoning\":\"2-3 sentences explaining the narrative arc you chose\"}"
+    )
+    try:
+        raw = _re.sub(r"```json|```", "", llm.predict(prompt, max_tokens=400)).strip()
+        p = _json.loads(raw)
+        order = [i for i in p.get("order", []) if isinstance(i, int) and 0 <= i < len(findings)]
+        if not order:
+            order = fallback_order
+        # sanity: situation first if present, profile/context not first
+        sit = next((i for i in order if findings[i].role == "situation"), None)
+        if sit is not None and order[0] != sit:
+            order.remove(sit); order.insert(0, sit)
+        return {"order": order,
+                "reasoning": p.get("reasoning", "Narrative sequenced by the agent."),
+                "arc": [findings[i].role for i in order]}
+    except Exception:
+        return {"order": fallback_order,
+                "reasoning": "Default consultant arc (AI sequencing unavailable).",
+                "arc": [findings[i].role for i in fallback_order]}
+
+
+def _scr_order(findings):
+    """Deterministic Situation→Complication→Cause-chain→Evidence→Context fallback."""
+    role_rank = {"situation": 0, "complication": 1, "root_cause": 2,
+                 "interaction": 3, "mix": 4, "evidence": 5, "context": 9}
+    idx = list(range(len(findings)))
+    idx.sort(key=lambda i: (role_rank.get(findings[i].role, 6), -findings[i].importance))
+    # keep it tight
+    return idx[:8]
+
+
+def narrate_finding(finding, framing, llm):
+    """Consultant prose from PROVEN facts only. LLM never sees raw data, only facts."""
+    if not llm:
+        return _fallback_narrative(finding)
+    prompt = (
+        "You are a McKinsey consultant writing the talking point for one slide.\n"
+        f"PROVEN facts (do not invent beyond these): {finding.fact_brief()}\n"
+        f"Audience: {framing.get('audience','leadership')}. "
+        f"Decision at stake: {framing.get('decision','')}\n"
+        "Write 1-2 crisp sentences: state the finding with its number, then the 'so what'. "
+        "No hedging, no preamble, no bullet points."
+    )
+    try:
+        return llm.predict(prompt, max_tokens=160).strip()
+    except Exception:
+        return _fallback_narrative(finding)
+
+
+def _fallback_narrative(f):
+    ff = f.facts
+    if f.ftype == "situation":
+        return (f"{ff.get('metric','The metric').title()} moved {ff.get('pct','')} over {ff.get('period','the period')}, "
+                f"from {ff.get('prior','')} to {ff.get('recent','')} — the headline we need to explain.")
+    if f.ftype in ("root_cause", "interaction"):
+        return (f"{ff.get('segment','This segment')} accounts for {ff.get('contribution_pct','the move')} "
+                f"({ff.get('segment_change','')}), making it the primary lever to address.")
+    if f.ftype == "mix":
+        return (f"{ff.get('segment','')} leads {ff.get('metric','')} at {ff.get('share','')} of the total "
+                f"({ff.get('value','')}) — the segment to protect and grow.")
+    if f.ftype == "concentration":
+        return (f"{ff.get('segment','One segment')} represents {ff.get('share','')} of activity — "
+                f"a concentration worth managing as a risk.")
+    if f.ftype == "correlation":
+        return (f"{ff.get('a','')} and {ff.get('b','')} are correlated (r={ff.get('r','')}), "
+                "suggesting a lever worth testing.")
+    return f"{ff.get('rows','')} records across {ff.get('cols','')} fields at {ff.get('completeness','')} completeness."
+
+
+"""
+Consultant deck builder — charts, storyboard styles, visual flow, pptx render.
+Depends on consultant.py (findings) + agent.py (visual/story choices).
+
+Storyboard STYLES (each defines a narrative ordering of finding-roles AND a
+flow label shown on the storyline slide):
+  - SCR              Situation → Complication → Root-cause chain → Implication → Action
+  - Pyramid          Answer first → supporting drivers → evidence
+  - Deep-dive        Headline → progressive drill-down (situation→root→interaction)
+  - Chronological    How it evolved over time → where it stands → what to do
+  - Comparison       Benchmark segments side-by-side → leader/laggard → action
+"""
+from pptx import Presentation
+from pptx.util import Inches as In, Pt
+from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN as AL, MSO_ANCHOR as AN
+from pptx.enum.shapes import MSO_SHAPE as SH
+from pptx.chart.data import CategoryChartData, XyChartData
+from pptx.enum.chart import XL_CHART_TYPE as CT, XL_LEGEND_POSITION as LEG, XL_LABEL_POSITION as LP
+from pptx.oxml.ns import qn
+
+
+# ============================================================
+# STORYBOARD STYLES
+# ============================================================
+STORYBOARD_STYLES = {
+    "SCR — Consultant (recommended)": {
+        "key": "scr",
+        "blurb": "Situation → Complication → Root-cause chain → Implication → Action. The classic McKinsey storyline.",
+        "role_order": ["situation", "complication", "root_cause", "interaction", "mix", "evidence", "action", "context"],
+        "flow": ["Situation", "Complication", "Root cause", "So what", "Action"],
+    },
+    "Pyramid — Answer first": {
+        "key": "pyramid",
+        "blurb": "Lead with the recommendation, then the findings that prove it. Best for execs who want the answer up front.",
+        "role_order": ["action", "situation", "root_cause", "interaction", "mix", "complication", "evidence", "context"],
+        "flow": ["Recommendation", "Why", "Evidence", "Proof points"],
+    },
+    "Deep-dive — Root cause": {
+        "key": "deepdive",
+        "blurb": "Headline number, then progressively drill into the driver and its interactions. Best for diagnostic reviews.",
+        "role_order": ["situation", "root_cause", "interaction", "mix", "complication", "evidence", "action", "context"],
+        "flow": ["Headline", "Driver", "Drill-down", "Pinpoint", "Action"],
+    },
+    "Chronological — Trend": {
+        "key": "chrono",
+        "blurb": "How the metric evolved, where it stands now, and what to do next. Best for performance updates.",
+        "role_order": ["situation", "mix", "root_cause", "interaction", "complication", "evidence", "action", "context"],
+        "flow": ["Where we were", "What changed", "Where we are", "Next"],
+    },
+    "Comparison — Benchmark": {
+        "key": "compare",
+        "blurb": "Segments side-by-side, leader vs laggard, then the move. Best for portfolio / regional reviews.",
+        "role_order": ["mix", "situation", "root_cause", "interaction", "complication", "evidence", "action", "context"],
+        "flow": ["Benchmark", "Leaders & laggards", "Why", "Action"],
+    },
+}
+
+
+def order_findings_by_style(findings, style_key):
+    style = next((v for v in STORYBOARD_STYLES.values() if v["key"] == style_key),
+                 STORYBOARD_STYLES["SCR — Consultant (recommended)"])
+    rank = {r: i for i, r in enumerate(style["role_order"])}
+    idx = sorted(range(len(findings)),
+                 key=lambda i: (rank.get(findings[i].role, 50), -findings[i].importance))
+    return idx[:8], style["flow"]
+
+
+# ============================================================
+# DRAW HELPERS (theme passed in as dict of hex strings)
+# ============================================================
+def _hx(h): h = h.lstrip("#"); return RGBColor(int(h[0:2],16),int(h[2:4],16),int(h[4:6],16))
+
+def _bg(s, c): f = s.background.fill; f.solid(); f.fore_color.rgb = _hx(c)
+
+def _shadow(shp, alpha=10000):
     try:
         spPr = shp._element.spPr
-        el = spPr.makeelement(_qn('a:effectLst'), {})
-        sh = spPr.makeelement(_qn('a:outerShdw'),
-                              {'blurRad': '90000', 'dist': '25000', 'dir': '5400000', 'rotWithShape': '0'})
-        clr = spPr.makeelement(_qn('a:srgbClr'), {'val': '1E1B4B'})
-        alpha = spPr.makeelement(_qn('a:alpha'), {'val': '11000'})
-        clr.append(alpha); sh.append(clr); el.append(sh); spPr.append(el)
-    except Exception:
-        pass
+        el = spPr.makeelement(qn('a:effectLst'), {})
+        sh = spPr.makeelement(qn('a:outerShdw'), {'blurRad':'110000','dist':'28000','dir':'5400000','rotWithShape':'0'})
+        clr = spPr.makeelement(qn('a:srgbClr'), {'val':'1F2235'}); aa = spPr.makeelement(qn('a:alpha'), {'val':str(alpha)})
+        clr.append(aa); sh.append(clr); el.append(sh); spPr.append(el)
+    except Exception: pass
 
-def _rect(s, x, y, w, h, fill=None, line=None, lw=1.0, shape=None, radius=0.08, shadow=False):
-    shp = s.shapes.add_shape(shape or _SH.ROUNDED_RECTANGLE, _In(x), _In(y), _In(w), _In(h))
-    shp.shadow.inherit = False
+def _rect(s, x,y,w,h, fill=None, line=None, lw=1.0, shape=SH.ROUNDED_RECTANGLE, radius=0.5, shdw=False):
+    shp = s.shapes.add_shape(shape, In(x),In(y),In(w),In(h)); shp.shadow.inherit=False
     if fill is None: shp.fill.background()
-    else: shp.fill.solid(); shp.fill.fore_color.rgb = _hx(fill)
+    else: shp.fill.solid(); shp.fill.fore_color.rgb=_hx(fill)
     if line is None: shp.line.fill.background()
-    else: shp.line.color.rgb = _hx(line); shp.line.width = _Pt(lw)
-    if (shape or _SH.ROUNDED_RECTANGLE) == _SH.ROUNDED_RECTANGLE:
-        try: shp.adjustments[0] = radius
+    else: shp.line.color.rgb=_hx(line); shp.line.width=Pt(lw)
+    if shape==SH.ROUNDED_RECTANGLE:
+        try: shp.adjustments[0]=radius
         except Exception: pass
-    if shadow: _soft_shadow(shp)
+    if shdw: _shadow(shp)
     return shp
 
-def _txt(s, text, x, y, w, h, size=14, font="Calibri", color="1E1B4B", bold=False,
-         align="left", valign="top", spacing=None, line_spacing=None):
-    tb = s.shapes.add_textbox(_In(x), _In(y), _In(w), _In(h)); tf = tb.text_frame
-    tf.word_wrap = True
-    for m in ("margin_left", "margin_right", "margin_top", "margin_bottom"): setattr(tf, m, 0)
-    tf.vertical_anchor = {"top": _AN.TOP, "middle": _AN.MIDDLE, "bottom": _AN.BOTTOM}[valign]
-    parts = text if isinstance(text, list) else [(text, color, bold)]
-    p = tf.paragraphs[0]
-    p.alignment = {"left": _AL.LEFT, "center": _AL.CENTER, "right": _AL.RIGHT}[align]
-    if line_spacing: p.line_spacing = line_spacing
-    for t, c, b in parts:
-        r = p.add_run(); r.text = t
-        r.font.size = _Pt(size); r.font.name = font; r.font.bold = b; r.font.color.rgb = _hx(c)
-        if spacing: r._r.get_or_add_rPr().set("spc", str(int(spacing * 100)))
+def _alpha_fill(shp, val):
+    try:
+        sp = shp.fill.fore_color._xFill
+        a = sp.makeelement(qn('a:alpha'), {'val':str(val)}); sp.find(qn('a:srgbClr')).append(a)
+    except Exception: pass
+
+def _txt(s, runs, x,y,w,h, size=14, font="Calibri", color="1F2235", bold=False, align="left",
+         valign="top", spacing=None, ls=None):
+    tb=s.shapes.add_textbox(In(x),In(y),In(w),In(h)); tf=tb.text_frame; tf.word_wrap=True
+    for m in ("margin_left","margin_right","margin_top","margin_bottom"): setattr(tf,m,0)
+    tf.vertical_anchor={"top":AN.TOP,"middle":AN.MIDDLE,"bottom":AN.BOTTOM}[valign]
+    parts = runs if isinstance(runs,list) else [(runs,color,bold)]
+    p=tf.paragraphs[0]; p.alignment={"left":AL.LEFT,"center":AL.CENTER,"right":AL.RIGHT}[align]
+    if ls: p.line_spacing=ls
+    for t,c,b in parts:
+        r=p.add_run(); r.text=t; r.font.size=Pt(size); r.font.name=font; r.font.bold=b; r.font.color.rgb=_hx(c)
+        if spacing: r._r.get_or_add_rPr().set("spc", str(int(spacing*100)))
     return tb
 
-def _badge(s, x, y, d, fill, glyph, glyph_color="FFFFFF", gsize=16):
-    _rect(s, x, y, d, d, fill=fill, shape=_SH.OVAL)
-    _txt(s, glyph, x, y - 0.02, d, d, size=gsize, font="Calibri", color=glyph_color,
-         bold=True, align="center", valign="middle")
+def _pill(s, x, y, text, th):
+    w=max(1.0, 0.16+0.10*len(text))
+    _rect(s, x,y,w,0.4, fill=th["tagbg"], radius=0.5)
+    _txt(s, text.upper(), x,y,w,0.4, size=10.5, font=th["bf"], color=th["tagink"], bold=True,
+         align="center", valign="middle", spacing=1.2)
+    return w
 
-def _bg(s, c):
-    f = s.background.fill; f.solid(); f.fore_color.rgb = _hx(c)
+def _section_head(s, tag, title, th, x=0.9, y=0.55):
+    _pill(s, x, y, tag, th)
+    _txt(s, title, x-0.04, y+0.5, 11.7, 1.4, size=33, font=th["hf"], color=th["ink"], bold=True, ls=1.03)
 
 
-def _chart(s, spec, x, y, w, h, th, BF, labels_on=True):
-    kind = spec.get("kind", "bar")
-    # auto-suppress data labels when crowded
-    if len(spec.get("labels", [])) > 12:
-        labels_on = False
-    cd = _CD(); cd.categories = [str(l) for l in spec["labels"]]
-    cd.add_series(spec.get("title", "Series"), spec["values"])
-    if kind == "line":
-        gf = s.shapes.add_chart(_CT.LINE_MARKERS, _In(x), _In(y), _In(w), _In(h), cd); ch = gf.chart
-        ser = ch.series[0]; ser.format.line.color.rgb = _hx(th["primary2"]); ser.format.line.width = _Pt(2.5)
-        if labels_on:
-            p = ch.plots[0]; p.has_data_labels = True
-            p.data_labels.font.size = _Pt(8); p.data_labels.position = _LP.ABOVE
-            p.data_labels.number_format = '0.0'; p.data_labels.number_format_is_linked = False
-    elif kind == "pie":
-        gf = s.shapes.add_chart(_CT.DOUGHNUT, _In(x), _In(y), _In(w), _In(h), cd); ch = gf.chart
-        ch.has_legend = True; ch.legend.position = _LEG.BOTTOM; ch.legend.include_in_layout = False
-        ch.legend.font.size = _Pt(9)
-        colors = [th["primary2"], th["accent"], th["blue"], th["green"], th["pink"], "94A3B8"]
-        for i, pt in enumerate(ch.plots[0].series[0].points):
-            pt.format.fill.solid(); pt.format.fill.fore_color.rgb = _hx(colors[i % len(colors)])
-        p = ch.plots[0]; p.has_data_labels = True
-        p.data_labels.show_percentage = True; p.data_labels.number_format = "0%"
-        p.data_labels.number_format_is_linked = False; p.data_labels.font.size = _Pt(9)
-    else:  # bar
-        gf = s.shapes.add_chart(_CT.COLUMN_CLUSTERED, _In(x), _In(y), _In(w), _In(h), cd); ch = gf.chart
-        ch.plots[0].gap_width = 55
-        colors = [th["primary2"], th["accent"], th["blue"], th["green"], th["pink"], "94A3B8"]
-        for i, pt in enumerate(ch.plots[0].series[0].points):
-            pt.format.fill.solid(); pt.format.fill.fore_color.rgb = _hx(colors[i % len(colors)])
-        if labels_on:
-            p = ch.plots[0]; p.has_data_labels = True
-            p.data_labels.font.size = _Pt(9); p.data_labels.position = _LP.OUTSIDE_END
-            p.data_labels.font.color.rgb = _hx(th["ink"])
-            p.data_labels.number_format = '#,##0'; p.data_labels.number_format_is_linked = False
-    ch.has_title = False
-    if kind != "pie":
-        ch.has_legend = False
-        try:
-            va = ch.value_axis; va.tick_labels.font.size = _Pt(9); va.tick_labels.font.color.rgb = _hx(th["soft"])
-            ca = ch.category_axis; ca.tick_labels.font.size = _Pt(9); ca.tick_labels.font.color.rgb = _hx(th["ink"])
-        except Exception:
-            pass
-    try: ch.font.name = BF
+# ============================================================
+# CONSULTANT CHART TYPES
+# ============================================================
+def _axis_style(ch, th, hide_val=False):
+    try:
+        ca=ch.category_axis; ca.tick_labels.font.size=Pt(10); ca.tick_labels.font.color.rgb=_hx(th["ink"])
+        ca.format.line.color.rgb=_hx(th["line"])
+    except Exception: pass
+    try:
+        va=ch.value_axis
+        if hide_val: va.visible=False
+        else:
+            va.tick_labels.font.size=Pt(9); va.tick_labels.font.color.rgb=_hx(th["soft"])
+            va.major_gridlines.format.line.color.rgb=_hx(th["line"]); va.major_gridlines.format.line.width=Pt(0.5)
+    except Exception: pass
+    try: ch.font.name=th["bf"]
+    except Exception: pass
+
+
+def chart_waterfall(s, x,y,w,h, labels, deltas, th, accent=None, start_total=None):
+    """
+    Floating waterfall drawn with positioned rectangles (robust for +/- deltas).
+    Shows a 'Total' anchor bar first, then each signed delta floating from the
+    running cumulative line. Native charts can't float below zero cleanly, so we
+    draw bars as shapes against a computed value->pixel scale.
+    deltas = signed segment contributions; start_total = bar height to anchor (optional).
+    """
+    accent = accent or th["accent"]
+    neg = th.get("neg", "E5484D")
+    # running cumulative positions
+    cum=[0.0]
+    for d in deltas: cum.append(cum[-1]+d)
+    # value range across all running points and zero
+    pts = cum + [0.0]
+    vmax=max(pts); vmin=min(pts); rng=(vmax-vmin) or 1
+    pad=rng*0.12; vmax+=pad; vmin-=pad; rng=vmax-vmin
+    plot_x, plot_y, plot_w, plot_h = x, y+0.1, w, h-0.7
+    def yv(v): return plot_y + (vmax - v)/rng*plot_h     # value -> y pixel
+    zero_y = yv(0)
+    # baseline
+    _rect(s, plot_x, zero_y-0.006, plot_w, 0.012, fill=th["line"], shape=SH.RECTANGLE)
+    n=len(deltas); slot=plot_w/max(1,n); bw=slot*0.56
+    for i,d in enumerate(deltas):
+        top=cum[i]; bot=cum[i+1]
+        y_hi=yv(max(top,bot)); y_lo=yv(min(top,bot))
+        bx=plot_x + i*slot + (slot-bw)/2
+        _rect(s, bx, y_hi, bw, max(0.04,y_lo-y_hi), fill=accent if d>=0 else neg, radius=0.12)
+        # connector line to next bar
+        if i<n-1:
+            cy=yv(cum[i+1])
+            _rect(s, bx+bw, cy-0.004, slot-bw, 0.008, fill=th["soft"], shape=SH.RECTANGLE)
+        # delta label above/below the bar
+        lbl=f"{d:+,.0f}"
+        ly = y_hi-0.28 if d>=0 else y_lo+0.02
+        _txt(s, lbl, bx-0.2, ly, bw+0.4, 0.26, size=9, font=th["bf"],
+             color=accent if d>=0 else neg, bold=True, align="center")
+        # category label under baseline
+        _txt(s, str(labels[i]), bx-0.2, plot_y+plot_h+0.06, bw+0.4, 0.4, size=9.5,
+             font=th["bf"], color=th["ink"], align="center")
+    return None
+
+
+def chart_bar_ranked(s, x,y,w,h, labels, values, th, highlight_idx=0):
+    cd=CategoryChartData(); cd.categories=[str(l) for l in labels]; cd.add_series("v", values)
+    gf=s.shapes.add_chart(CT.COLUMN_CLUSTERED, In(x),In(y),In(w),In(h), cd); ch=gf.chart
+    ch.has_title=False; ch.has_legend=False; ch.plots[0].gap_width=70
+    ser=ch.series[0]
+    for i in range(len(values)):
+        pt=ser.points[i]; pt.format.fill.solid()
+        pt.format.fill.fore_color.rgb=_hx(th["accent"] if i==highlight_idx else th["muted"])
+    plot=ch.plots[0]; plot.has_data_labels=True
+    dl=plot.data_labels; dl.font.size=Pt(11); dl.font.color.rgb=_hx(th["ink"]); dl.font.bold=True
+    dl.position=LP.OUTSIDE_END; dl.number_format='#,##0'; dl.number_format_is_linked=False
+    _axis_style(ch, th, hide_val=True)
+    return ch
+
+
+def chart_line(s, x,y,w,h, labels, values, th, area=False):
+    cd=CategoryChartData(); cd.categories=[str(l) for l in labels]; cd.add_series("v", values)
+    kind=CT.AREA if area else CT.LINE
+    gf=s.shapes.add_chart(kind, In(x),In(y),In(w),In(h), cd); ch=gf.chart
+    ch.has_title=False; ch.has_legend=False
+    ser=ch.series[0]
+    if area:
+        ser.format.fill.solid(); ser.format.fill.fore_color.rgb=_hx(th["accent"]); _alpha_fill(ser, 24000)
+        ser.format.line.color.rgb=_hx(th["accent"]); ser.format.line.width=Pt(2.5)
+    else:
+        ser.smooth=True; ser.format.line.color.rgb=_hx(th["accent"]); ser.format.line.width=Pt(3)
+    _axis_style(ch, th)
+    return ch
+
+
+def chart_donut(s, x,y,w,h, labels, values, th):
+    cd=CategoryChartData(); cd.categories=[str(l) for l in labels]; cd.add_series("v", values)
+    gf=s.shapes.add_chart(CT.DOUGHNUT, In(x),In(y),In(w),In(h), cd); ch=gf.chart
+    ch.has_title=False; ch.has_legend=True; ch.legend.position=LEG.RIGHT; ch.legend.include_in_layout=False
+    ch.legend.font.size=Pt(10)
+    cols=[th["accent"], th["muted"], th["accent2"], th["soft"], "C9CCDA", "E1E3EC"]
+    for i,pt in enumerate(ch.plots[0].series[0].points):
+        pt.format.fill.solid(); pt.format.fill.fore_color.rgb=_hx(cols[i%len(cols)])
+    p=ch.plots[0]; p.has_data_labels=True; p.data_labels.show_percentage=True
+    p.data_labels.number_format='0%'; p.data_labels.number_format_is_linked=False; p.data_labels.font.size=Pt(10)
+    try: ch.font.name=th["bf"]
     except Exception: pass
     return ch
 
 
-def _insight_rows(s, items, x, y, w, th, BF, row_h=0.78):
-    tints = [th["surface"], th["surface2"], th["surface3"], th["surface"]]
-    glyphcols = [th["primary2"], th["blue"], th["accent"], th["green"]]
-    for i, it in enumerate(items[:4]):
-        ry = y + i * row_h
-        _badge(s, x, ry + 0.04, 0.46, tints[i % 4], it["glyph"],
-               glyph_color=glyphcols[i % 4], gsize=14)
-        parts = []
-        if it.get("stat"):
-            parts = [(it["head"] + "  ", th["ink"], True), (it["stat"], glyphcols[i % 4], True)]
-        else:
-            parts = [(it["head"], th["ink"], True)]
-        _txt(s, parts, x + 0.6, ry, w - 0.6, 0.3, size=10.5, font=BF, valign="top")
-        _txt(s, it.get("text", ""), x + 0.6, ry + 0.26, w - 0.6, row_h - 0.28,
-             size=9, font=BF, color=th["soft"], line_spacing=1.0)
+def chart_dumbbell(s, x,y,w,h, labels, prior, recent, th):
+    """Prior vs recent dots per segment, connected — drawn as a clustered bar proxy
+    isn't ideal, so we draw it manually with shapes for the consultant look."""
+    n=len(labels); 
+    if n==0: return
+    allv = prior+recent; mn=min(allv); mx=max(allv); rng=(mx-mn) or 1
+    row_h = h/n
+    for i,lab in enumerate(labels):
+        cy = y + i*row_h + row_h/2
+        px = x + 2.2 + (prior[i]-mn)/rng*(w-2.6)
+        rx = x + 2.2 + (recent[i]-mn)/rng*(w-2.6)
+        _txt(s, str(lab), x, cy-0.16, 2.0, 0.32, size=10, font=th["bf"], color=th["ink"], valign="middle")
+        # connector
+        lo,hi = sorted([px,rx])
+        _rect(s, lo, cy-0.012, hi-lo, 0.024, fill=th["line"], shape=SH.RECTANGLE)
+        # prior dot (muted), recent dot (accent)
+        _rect(s, px-0.07, cy-0.07, 0.14, 0.14, fill=th["muted"], shape=SH.OVAL)
+        _rect(s, rx-0.07, cy-0.07, 0.14, 0.14, fill=th["accent"], shape=SH.OVAL)
 
 
-def build_pptx(spec, out_path):
-    if not PPTX_OK:
-        return False, "python-pptx not installed. Add `python-pptx` to requirements.txt."
-    meta = spec["meta"]; th = DECK_THEMES[meta["theme"]]
-    fonts = DECK_FONTS[meta["font"]]; HF, BF = fonts["header"], fonts["body"]
-    prs = _Prs(); prs.slide_width = _In(13.333); prs.slide_height = _In(7.5)
-    blank = prs.slide_layouts[6]; W, H = 13.333, 7.5
+def chart_slope(s, x,y,w,h, labels, prior, recent, th):
+    """Two-column slope chart drawn with shapes/lines."""
+    n=len(labels)
+    if n==0: return
+    allv=prior+recent; mn=min(allv); mx=max(allv); rng=(mx-mn) or 1
+    lx, rxx = x+1.4, x+w-1.4
+    def yv(v): return y+h-0.3 - (v-mn)/rng*(h-0.8)
+    _txt(s,"Prior",lx-0.6,y-0.05,1.2,0.3,size=10,font=th["bf"],color=th["soft"],align="center")
+    _txt(s,"Recent",rxx-0.6,y-0.05,1.2,0.3,size=10,font=th["bf"],color=th["soft"],align="center")
+    cols=[th["accent"], th["accent2"], th["soft"], th["muted"], "9AA0B8"]
+    for i,lab in enumerate(labels):
+        y0,y1=yv(prior[i]),yv(recent[i]); c=cols[i%len(cols)]
+        ln=s.shapes.add_connector(2, In(lx),In(y0),In(rxx),In(y1))
+        ln.line.color.rgb=_hx(c); ln.line.width=Pt(2.2); ln.shadow.inherit=False
+        _rect(s,lx-0.06,y0-0.06,0.12,0.12,fill=c,shape=SH.OVAL)
+        _rect(s,rxx-0.06,y1-0.06,0.12,0.12,fill=c,shape=SH.OVAL)
+        _txt(s,f"{lab}",rxx+0.15,y1-0.14,1.8,0.3,size=9,font=th["bf"],color=th["ink"],valign="middle")
 
-    def title_bar(s, t):
-        _rect(s, 0.5, 0.34, 0.13, 0.6, fill=th["primary2"], shape=_SH.RECTANGLE)
-        _txt(s, t, 0.78, 0.30, 12.0, 0.74, size=27, font=HF, color=th["ink"], bold=True)
 
-    def banner(s, y, glyph, parts, fill, gfill):
-        _rect(s, 0.5, y, 12.33, 0.72, fill=fill, radius=0.18)
-        _badge(s, 0.7, y + 0.13, 0.46, gfill, glyph, gsize=13)
-        _txt(s, parts, 1.36, y + 0.05, 11.2, 0.62, size=12, font=BF, valign="middle", line_spacing=1.0)
+def chart_scatter(s, x,y,w,h, xs, ys, th, xlab="", ylab=""):
+    cd=XyChartData(); ser=cd.add_series("pts")
+    for a,b in zip(xs,ys): ser.add_data_point(a,b)
+    gf=s.shapes.add_chart(CT.XY_SCATTER, In(x),In(y),In(w),In(h), cd); ch=gf.chart
+    ch.has_title=False; ch.has_legend=False
+    pser=ch.series[0]; pser.marker.format.fill.solid(); pser.marker.format.fill.fore_color.rgb=_hx(th["accent"])
+    try: pser.marker.size=5
+    except Exception: pass
+    _axis_style(ch, th)
+    return ch
 
-    def slidenum(s, n):
-        _txt(s, str(n), 12.7, 7.15, 0.4, 0.25, size=9, font=BF, color=th["soft"], align="right")
+
+# ============================================================
+# VISUAL FLOW  — the "storyline" slide (chevron arc of the narrative)
+# ============================================================
+def slide_storyline(prs, blank, th, style_name, flow_steps, framing):
+    """A visual map of the deck's narrative arc as connected chevrons."""
+    s=prs.slides.add_slide(blank); _bg(s, th["canvas"])
+    _section_head(s, "Storyline", framing.get("title","How this story unfolds"), th)
+    n=len(flow_steps); 
+    if n==0: return s
+    gap=0.25; total_w=11.6; cw=(total_w-(n-1)*gap)/n
+    x0=0.9; y=3.0; chh=1.5
+    for i,step in enumerate(flow_steps):
+        x=x0+i*(cw+gap)
+        shape = SH.PENTAGON if i<n-1 else SH.ROUNDED_RECTANGLE
+        fill = th["accent"] if i==0 else th["accent2"] if i==n-1 else th["panel"]
+        txtc = "FFFFFF" if i in (0,n-1) else th["ink"]
+        r=_rect(s, x, y, cw, chh, fill=fill, line=(None if i in (0,n-1) else th["line"]),
+                lw=1.4, shape=shape, radius=0.18, shdw=True)
+        _txt(s, f"{i+1}", x, y+0.18, cw, 0.4, size=13, font=th["bf"],
+             color=(txtc if i in (0,n-1) else th["accent"]), bold=True, align="center")
+        _txt(s, step, x, y+0.55, cw, 0.8, size=14, font=th["hf"], color=txtc, bold=True,
+             align="center", valign="middle", ls=1.0)
+    _txt(s, f"Structure: {style_name}", 0.9, y+chh+0.4, 11.6, 0.4, size=12,
+         font=th["bf"], color=th["soft"])
+    return s
+
+
+
+
+# ---- consultant glue ----
+try:
+    from pptx import Presentation as _Ck_Prs   # availability probe
+    _CONSULT_OK = True
+except Exception:
+    _CONSULT_OK = False
+
+# charts namespace passed to the pptx renderer
+from pptx.enum.shapes import MSO_SHAPE as _MSO_SHAPE_NS
+_CHARTS_NS = {
+    "_bg": _bg, "_rect": _rect, "_txt": _txt, "_pill": _pill,
+    "_section_head": _section_head, "_alpha_fill": _alpha_fill,
+    "chart_waterfall": chart_waterfall, "chart_bar_ranked": chart_bar_ranked,
+    "chart_line": chart_line, "chart_donut": chart_donut,
+    "chart_dumbbell": chart_dumbbell, "chart_slope": chart_slope,
+    "chart_scatter": chart_scatter, "slide_storyline": slide_storyline,
+    "SH": _MSO_SHAPE_NS,
+}
+# styles dict for the deck spec builder (with display names attached)
+__STYLES = {}
+for _nm, _v in STORYBOARD_STYLES.items():
+    _vv = dict(_v); _vv["__name"] = _nm; __STYLES[_nm] = _vv
+
+
+"""
+Consultant deck assembly — spec builder, pptx slide renderer, HTML preview.
+Ties: consultant.py (findings) + agent.py (visual/story/narration) + pm_charts.py (charts).
+"""
+from pptx import Presentation
+from pptx.util import Inches as In, Pt
+
+
+# theme registry (hex + font keys) used by the consultant renderer
+CONSULT_THEMES = {
+    "Indigo (Gamma-style)": {
+        "canvas":"F7F7FB","ink":"1F2235","body":"3F4256","soft":"8A8DA3","muted":"C9CCDA",
+        "accent":"6D5EF8","accent2":"8B7CFF","neg":"E5484D","tagbg":"E5E3FB","tagink":"5B4FE0",
+        "line":"E6E6EF","panel":"FFFFFF",
+    },
+    "KiteIQX (Navy/Gold)": {
+        "canvas":"F7F8FB","ink":"0A2540","body":"3A4A5E","soft":"7A8699","muted":"CBD5E1",
+        "accent":"C79A3A","accent2":"E6C878","neg":"B91C1C","tagbg":"FBF0D5","tagink":"8A6A1E",
+        "line":"E3E6EE","panel":"FFFFFF",
+    },
+    "Slate (Corporate)": {
+        "canvas":"F1F5F9","ink":"0F172A","body":"334155","soft":"64748B","muted":"CBD5E1",
+        "accent":"0EA5E9","accent2":"38BDF8","neg":"E11D48","tagbg":"E0F2FE","tagink":"0369A1",
+        "line":"E2E8F0","panel":"FFFFFF",
+    },
+}
+CONSULT_FONTS = {
+    "Arial + Calibri": {"hf":"Arial","bf":"Calibri"},
+    "Georgia + Calibri": {"hf":"Georgia","bf":"Calibri"},
+    "Trebuchet + Calibri": {"hf":"Trebuchet MS","bf":"Calibri"},
+}
+
+
+def _theme(theme_name, font_name):
+    th = dict(CONSULT_THEMES.get(theme_name, list(CONSULT_THEMES.values())[0]))
+    f = CONSULT_FONTS.get(font_name, list(CONSULT_FONTS.values())[0])
+    th["hf"], th["bf"] = f["hf"], f["bf"]
+    return th
+
+
+def _delta_chart_from_finding(f):
+    """Turn a root_cause/interaction finding's table into waterfall deltas."""
+    ch = f.chart or {}
+    labels = ch.get("labels", []); deltas = ch.get("values", [])
+    return labels, deltas
+
+
+def build_consultant_spec(analytics, findings, ctx, framing, theme_name, font_name,
+                          style_key, order, narrations, visuals):
+    """
+    Assemble an ordered slide spec.
+      narrations: {finding_index: narrative str}
+      visuals:    {finding_index: {chart_kind, action_title}}
+    """
+    from datetime import datetime
+    meta = {"title": framing.get("title") or "Data Story",
+            "subtitle": framing.get("subtitle") or ctx.describe()[0].title() + " analysis",
+            "theme": theme_name, "font": font_name, "style": style_key,
+            "date": datetime.now().strftime("%B %Y"),
+            "decision": framing.get("decision",""), "audience": framing.get("audience","")}
+
+    # flow steps from the chosen style
+    from_style = next((v for v in __STYLES.values() if v["key"] == style_key),
+                      list(__STYLES.values())[0])
+    flow = from_style["flow"]
+
+    slides = [{"kind":"title", "title":meta["title"], "subtitle":meta["subtitle"], "date":meta["date"]}]
+    slides.append({"kind":"storyline", "style_name":from_style["__name"], "flow":flow,
+                   "title": framing.get("flow_title","How this story unfolds")})
+
+    for oi in order:
+        f = findings[oi]
+        v = visuals.get(oi, {"chart_kind": None, "action_title": None})
+        narr = narrations.get(oi, f.narrative or "")
+        title = v.get("action_title") or f._fallback_title() if hasattr(f, "_fallback_title") else v.get("action_title")
+        title = v.get("action_title") or "Finding"
+        tag = {"situation":"Situation","complication":"Complication","root_cause":"Root cause",
+               "interaction":"Drill-down","mix":"Breakdown","evidence":"Evidence",
+               "correlation":"Relationship","concentration":"Concentration","profile":"Overview",
+               "action":"Action"}.get(f.role, f.ftype.title())
+
+        slides.append({
+            "kind":"finding", "tag":tag, "title":title, "narrative":narr,
+            "chart_kind": v.get("chart_kind"), "chart": f.chart, "facts": f.facts,
+            "ftype": f.ftype,
+        })
+
+    # recommendations slide (from action/narrations or fallback to top findings)
+    recs = framing.get("recommendations") or [findings[i].narrative or "" for i in order[:3]]
+    slides.append({"kind":"actions", "title":"Recommended Next Steps", "items":[r for r in recs if r][:3]})
+    slides.append({"kind":"closing", "message": framing.get("closing","The data points to a clear next move."),
+                   "date": meta["date"]})
+    return {"meta": meta, "slides": slides}
+
+
+# ── PPTX RENDER ─────────────────────────────────────────────
+def build_consultant_pptx(spec, out_path, charts_mod):
+    """charts_mod = the module namespace holding _bg,_rect,_txt,_pill,_section_head,chart_*"""
+    th = _theme(spec["meta"]["theme"], spec["meta"]["font"])
+    G = charts_mod
+    prs = Presentation(); prs.slide_width=In(13.333); prs.slide_height=In(7.5)
+    blank = prs.slide_layouts[6]; W,H = 13.333, 7.5
+
+    def num(s, n): G["_txt"](s, str(n), 12.7, 7.15, 0.4, 0.25, size=9, font=th["bf"], color=th["soft"], align="right")
 
     for idx, sl in enumerate(spec["slides"], 1):
-        k = sl["kind"]
-        s = prs.slides.add_slide(blank)
+        k = sl["kind"]; s = prs.slides.add_slide(blank)
 
         if k == "title":
-            _bg(s, th["primary"])
-            _rect(s, 0, 0, 0.16, H, fill=th["accent"], shape=_SH.RECTANGLE)
-            _rect(s, W - 2.4, 0, 2.4, 2.0, fill=th["primary2"], shape=_SH.RECTANGLE)
-            _txt(s, "KITEIQX INTELLIGENCE", 0.7, 1.4, 9, 0.4, size=12, font=BF,
-                 color=th["accent"], bold=True, spacing=4)
-            _txt(s, sl["title"], 0.7, 2.2, 11.5, 2.4, size=46, font=HF, color="FFFFFF", bold=True)
-            _txt(s, sl.get("subtitle", ""), 0.7, 4.7, 10.5, 0.9, size=16, font=BF, color="C7C3E8")
-            _txt(s, sl.get("date", ""), 0.7, 6.6, 4, 0.4, size=12, font=BF, color=th["accent"])
+            G["_bg"](s, th["accent"])
+            G["_rect"](s, 0,0,0.18,H, fill=th["accent2"], shape=G["SH"].RECTANGLE)
+            G["_txt"](s, spec["meta"]["date"].upper(), 0.9,1.5,6,0.4, size=12, font=th["bf"],
+                      color="FFFFFF", bold=True, spacing=3)
+            G["_txt"](s, sl["title"], 0.86,2.2,10.5,2.4, size=52, font=th["hf"], color="FFFFFF", bold=True, ls=1.04)
+            G["_txt"](s, sl.get("subtitle",""), 0.9,4.8,9.5,0.9, size=18, font=th["bf"], color="EDEBFF")
+            G["_txt"](s, "Powered by KiteIQX Intelligence", 0.9,6.6,8,0.5, size=12, font=th["bf"], color="D6D2FF")
 
-        elif k == "dashboard":
-            _bg(s, "FFFFFF"); title_bar(s, sl["title"])
-            banner(s, 1.1, GLY["bulb"],
-                   [(sl["banner"], th["ink"], False)], th["surface"], th["primary2"])
-            kpis = sl.get("kpis", [])[:4]; cw, gap = 2.94, 0.16; xs = 0.5; cy, chh = 2.02, 1.32
-            for i, kp in enumerate(kpis):
-                x = xs + i * (cw + gap)
-                _rect(s, x, cy, cw, chh, fill="FFFFFF", line=th["line"], lw=1, radius=0.10, shadow=True)
-                d = 0.6; _badge(s, x + 0.16, cy + (chh - d) / 2 - 0.16, d, th[kp["ck"]], kp["glyph"], gsize=19)
-                tx = x + 0.16 + d + 0.14
-                _txt(s, kp["label"], tx, cy + 0.18, cw - (tx - x) - 0.1, 0.3, size=9.5, font=BF,
-                     color=th["soft"], bold=True, spacing=0.4)
-                _txt(s, kp["value"], tx, cy + 0.45, cw - (tx - x) - 0.1, 0.5, size=22, font=HF,
-                     color=th[kp["ck"]], bold=True)
-                _txt(s, kp["sub"], tx, cy + 0.95, cw - (tx - x) - 0.1, 0.3, size=8.5, font=BF, color=th["soft"])
-            # chart card + insights
-            _rect(s, 0.5, 3.55, 8.4, 2.92, fill="FFFFFF", line=th["line"], lw=1, radius=0.05, shadow=True)
-            ctitle = (sl.get("chart") or {}).get("title", "Overview")
-            _rect(s, 0.7, 3.7, min(5.5, 0.25 + 0.11 * len(ctitle)), 0.4, fill=th["primary"], radius=0.3)
-            _txt(s, ctitle.upper(), 0.82, 3.74, 5.2, 0.32, size=10, font=HF, color="FFFFFF",
-                 bold=True, valign="middle")
-            if sl.get("chart"):
-                _chart(s, sl["chart"], 0.62, 4.18, 8.15, 2.18, th, BF)
-            _rect(s, 9.1, 3.55, 3.73, 2.92, fill="FFFFFF", line=th["line"], lw=1, radius=0.05, shadow=True)
-            _rect(s, 9.55, 3.7, 2.83, 0.4, fill=th["primary"], radius=0.3)
-            _txt(s, "KEY INSIGHTS", 9.55, 3.74, 2.83, 0.32, size=11, font=HF, color="FFFFFF",
-                 bold=True, align="center", valign="middle")
-            _insight_rows(s, sl.get("insights", []), 9.3, 4.28, 3.4, th, BF, row_h=0.55)
-            banner(s, 6.62, GLY["bulb"], [(sl.get("footer", ""), th["ink"], False)],
-                   th["surface3"], th["accent"])
-            slidenum(s, idx)
+        elif k == "storyline":
+            G["slide_storyline"](prs_existing=s) if False else None
+            # draw inline (reuse pieces)
+            G["_bg"](s, th["canvas"])
+            G["_section_head"](s, "Storyline", sl.get("title","How this story unfolds"), th)
+            flow = sl.get("flow", []); n=len(flow)
+            if n:
+                gap=0.25; total=11.6; cw=(total-(n-1)*gap)/n; x0=0.9; y=3.0; chh=1.5
+                for i,step in enumerate(flow):
+                    x=x0+i*(cw+gap)
+                    shape = G["SH"].PENTAGON if i<n-1 else G["SH"].ROUNDED_RECTANGLE
+                    fill = th["accent"] if i==0 else th["accent2"] if i==n-1 else th["panel"]
+                    tc = "FFFFFF" if i in (0,n-1) else th["ink"]
+                    G["_rect"](s, x,y,cw,chh, fill=fill, line=(None if i in (0,n-1) else th["line"]),
+                               lw=1.4, shape=shape, radius=0.18, shdw=True)
+                    G["_txt"](s, str(i+1), x,y+0.18,cw,0.4, size=13, font=th["bf"],
+                              color=(tc if i in (0,n-1) else th["accent"]), bold=True, align="center")
+                    G["_txt"](s, step, x,y+0.55,cw,0.8, size=14, font=th["hf"], color=tc, bold=True,
+                              align="center", valign="middle")
+                G["_txt"](s, f"Structure: {sl.get('style_name','')}", 0.9,y+chh+0.4,11.6,0.4,
+                          size=12, font=th["bf"], color=th["soft"])
+            num(s, idx)
 
-        elif k == "story_chart":
-            _bg(s, "FFFFFF"); title_bar(s, sl["title"])
-            banner(s, 1.1, GLY["growth"], [(sl["banner"], th["ink"], False)], th["surface"], th["primary2"])
-            _rect(s, 0.5, 2.0, 8.4, 4.5, fill="FFFFFF", line=th["line"], lw=1, radius=0.04, shadow=True)
-            ctitle = sl["chart"].get("title", "Detail")
-            _rect(s, 0.7, 2.16, min(5.5, 0.25 + 0.11 * len(ctitle)), 0.4, fill=th["primary"], radius=0.3)
-            _txt(s, ctitle.upper(), 0.82, 2.20, 5.2, 0.32, size=10, font=HF, color="FFFFFF",
-                 bold=True, valign="middle")
-            _chart(s, sl["chart"], 0.62, 2.7, 8.15, 3.6, th, BF)
-            _rect(s, 9.1, 2.0, 3.73, 4.5, fill="FFFFFF", line=th["line"], lw=1, radius=0.04, shadow=True)
-            if sl.get("stat_value"):
-                _rect(s, 9.3, 2.2, 3.33, 1.2, fill=th["surface"], radius=0.12)
-                _txt(s, sl["stat_value"], 9.3, 2.34, 3.33, 0.7, size=34, font=HF, color=th["primary2"],
-                     bold=True, align="center")
-                _txt(s, sl.get("stat_label", ""), 9.3, 3.02, 3.33, 0.3, size=10, font=BF,
-                     color=th["soft"], align="center")
-            _txt(s, "WHY IT MATTERS", 9.3, 3.6, 3.33, 0.3, size=10, font=HF, color=th["ink"], bold=True, spacing=0.5)
-            _insight_rows(s, sl.get("insights", []), 9.3, 3.95, 3.4, th, BF, row_h=0.82)
-            slidenum(s, idx)
+        elif k == "finding":
+            G["_bg"](s, th["canvas"])
+            G["_section_head"](s, sl["tag"], sl["title"], th)
+            ck = sl.get("chart_kind"); ch = sl.get("chart") or {}
+            cx, cw, cy, chh = 0.9, 6.9, 2.25, 4.0
+            drew = False
+            try:
+                if ck == "waterfall" and ch.get("labels"):
+                    G["chart_waterfall"](s, cx,cy,cw,chh, ch["labels"], ch["values"], th); drew=True
+                elif ck == "bar_ranked" and ch.get("labels"):
+                    G["chart_bar_ranked"](s, cx,cy,cw,chh, ch["labels"], ch["values"], th, 0); drew=True
+                elif ck in ("line","area") and ch.get("labels"):
+                    G["chart_line"](s, cx,cy,cw,chh, ch["labels"], ch["values"], th, area=(ck=="area")); drew=True
+                elif ck in ("donut","stacked100") and ch.get("labels"):
+                    G["chart_donut"](s, cx,cy,cw,chh, ch["labels"], ch["values"], th); drew=True
+                elif ck == "scatter" and ch.get("x"):
+                    G["chart_scatter"](s, cx,cy,cw,chh, ch["x"], ch["y"], th); drew=True
+                elif ck in ("slope","dumbbell"):
+                    # need prior/recent; reuse values as recent, facts prior — fallback to bar
+                    if ch.get("labels"):
+                        G["chart_bar_ranked"](s, cx,cy,cw,chh, ch["labels"], ch["values"], th, 0); drew=True
+            except Exception:
+                drew=False
+            # right: narrative + key fact callout
+            ix = 8.1
+            facts = sl.get("facts", {})
+            big = facts.get("contribution_pct") or facts.get("share") or facts.get("pct") or facts.get("r","")
+            if big:
+                G["_rect"](s, ix, cy, 4.3, 1.25, fill=th["tagbg"], radius=0.12)
+                G["_txt"](s, str(big), ix, cy+0.14, 4.3, 0.7, size=26, font=th["hf"], color=th["tagink"],
+                          bold=True, align="center")
+                G["_txt"](s, "key figure", ix, cy+0.86, 4.3, 0.3, size=10, font=th["bf"],
+                          color=th["soft"], align="center")
+                ny = cy+1.5
+            else:
+                ny = cy
+            G["_txt"](s, sl.get("narrative",""), ix, ny+0.1, 4.3, 2.4, size=14, font=th["bf"],
+                      color=th["body"], ls=1.35)
+            if not drew and not ck:
+                # number-led slide
+                G["_txt"](s, str(big), 0.9, 3.0, 6.5, 1.6, size=90, font=th["hf"], color=th["accent"], bold=True)
+            num(s, idx)
 
-        elif k == "big_stat":
-            _bg(s, th["primary"]); _rect(s, 0, 0, 0.16, H, fill=th["accent"], shape=_SH.RECTANGLE)
-            _txt(s, sl["title"], 0.8, 1.0, 11.5, 1.2, size=26, font=HF, color="FFFFFF", bold=True)
-            _txt(s, sl.get("stat_value", ""), 0.8, 2.3, 11.5, 2.2, size=120, font=HF,
-                 color=th["accent"], bold=True)
-            _txt(s, sl.get("stat_label", "").upper(), 0.85, 4.7, 11.5, 0.5, size=16, font=BF,
-                 color="C7C3E8", spacing=1)
-            _txt(s, sl.get("body", ""), 0.8, 5.5, 11.0, 1.3, size=15, font=BF, color="E5E3F5",
-                 line_spacing=1.2)
-            slidenum(s, idx)
-
-        elif k == "takeaways":
-            _bg(s, "FFFFFF"); title_bar(s, sl["title"])
-            colors = [th["primary2"], th["accent"], th["blue"]]
-            for i, t in enumerate(sl.get("items", [])[:3]):
-                y = 1.45 + i * 1.78
-                _rect(s, 0.5, y, 12.33, 1.55, fill="FFFFFF", line=th["line"], lw=1, radius=0.06, shadow=True)
-                _rect(s, 0.5, y, 0.7, 1.55, fill=colors[i % 3], shape=_SH.RECTANGLE)
-                _txt(s, str(i + 1), 0.5, y, 0.7, 1.55, size=30, font=HF, color="FFFFFF", bold=True,
-                     align="center", valign="middle")
-                _txt(s, t, 1.45, y + 0.15, 11.2, 1.25, size=15, font=BF, color=th["ink"],
-                     valign="middle", line_spacing=1.1)
-            slidenum(s, idx)
-
-        elif k == "quality":
-            _bg(s, "FFFFFF"); title_bar(s, sl["title"])
-            sc = sl.get("score", 85)
-            clr = th["green"] if sc >= 90 else th["blue"] if sc >= 75 else th["accent"] if sc >= 60 else th["pink"]
-            _rect(s, 0.8, 1.7, 3.2, 3.2, fill="FFFFFF", line=clr, lw=6, shape=_SH.OVAL, shadow=True)
-            _txt(s, str(sc), 0.8, 2.3, 3.2, 1.6, size=72, font=HF, color=clr, bold=True,
-                 align="center", valign="middle")
-            _txt(s, "/ 100", 0.8, 3.85, 3.2, 0.4, size=14, font=BF, color=clr, align="center")
-            _txt(s, "QUALITY SUMMARY", 4.5, 1.8, 8, 0.4, size=13, font=HF, color=th["ink"], bold=True, spacing=0.5)
-            _txt(s, sl.get("summary") or "Dataset is analysis-ready.", 4.5, 2.35, 8.0, 3.2,
-                 size=14, font=BF, color=th["ink"], line_spacing=1.3)
-            slidenum(s, idx)
+        elif k == "actions":
+            G["_bg"](s, th["canvas"])
+            G["_section_head"](s, "Action plan", sl["title"], th)
+            cols=[th["accent"], th["accent2"], th["soft"]]
+            for i,t in enumerate(sl.get("items", [])[:3]):
+                y=1.7+i*1.7
+                G["_rect"](s, 0.9,y,11.6,1.45, fill=th["panel"], line=th["line"], lw=1, radius=0.10, shdw=True)
+                G["_rect"](s, 0.9,y,0.7,1.45, fill=cols[i%3], shape=G["SH"].RECTANGLE)
+                G["_txt"](s, str(i+1), 0.9,y,0.7,1.45, size=28, font=th["hf"], color="FFFFFF",
+                          bold=True, align="center", valign="middle")
+                G["_txt"](s, t, 1.8,y+0.12,10.4,1.2, size=14.5, font=th["bf"], color=th["ink"],
+                          valign="middle", ls=1.15)
+            num(s, idx)
 
         elif k == "closing":
-            _bg(s, th["primary"]); _rect(s, 0, 0, 0.16, H, fill=th["accent"], shape=_SH.RECTANGLE)
-            _rect(s, W - 3.0, H - 2.4, 3.0, 2.4, fill=th["primary2"], shape=_SH.RECTANGLE)
-            _txt(s, "KITEIQX INTELLIGENCE", 0.7, 1.3, 9, 0.4, size=12, font=BF, color=th["accent"],
-                 bold=True, spacing=4)
-            _txt(s, sl.get("message", "Thank you."), 0.7, 2.2, 11.0, 2.6, size=38, font=HF,
-                 color="FFFFFF", bold=True, line_spacing=1.05)
-            _txt(s, "Generated by KiteIQX Intelligence · " + sl.get("date", ""), 0.7, 5.6, 10, 0.4,
-                 size=12, font=BF, color="9A93C8")
+            G["_bg"](s, th["accent"])
+            G["_rect"](s, 0,0,0.18,H, fill=th["accent2"], shape=G["SH"].RECTANGLE)
+            G["_txt"](s, "KITEIQX INTELLIGENCE", 0.9,1.4,9,0.4, size=12, font=th["bf"],
+                      color="EDEBFF", bold=True, spacing=3)
+            G["_txt"](s, sl.get("message","Thank you."), 0.9,2.3,11,2.4, size=40, font=th["hf"],
+                      color="FFFFFF", bold=True, ls=1.05)
+            G["_txt"](s, "Generated by KiteIQX Intelligence · "+sl.get("date",""), 0.9,5.7,10,0.4,
+                      size=12, font=th["bf"], color="D6D2FF")
 
     prs.save(out_path)
-    return True, f"Generated {_Path(out_path).name} ({_Path(out_path).stat().st_size // 1024} KB)"
+    from pathlib import Path
+    return True, f"Generated {Path(out_path).name} ({Path(out_path).stat().st_size//1024} KB)"
 
 
-# ============================================================
-# HTML PREVIEW  (faithful mockup, no dependencies)
-# ============================================================
+# ── HTML PREVIEW (consultant slides) ────────────────────────
+def _svg_for(ck, ch, th):
+    if not ch: return ""
+    A="#"+th["accent"]; M="#"+th["muted"]; NEG="#"+th["neg"]; INK="#"+th["ink"]; SOFT="#"+th["soft"]
+    labels=[str(l) for l in ch.get("labels",[])]; vals=[float(v) for v in ch.get("values",[])]
+    w,hh=470,210; pad=26
+    if ck=="waterfall" and vals:
+        cum=[0]; 
+        for d in vals: cum.append(cum[-1]+d)
+        allp=cum+[0]; vmax=max(allp); vmin=min(allp); rng=(vmax-vmin) or 1
+        def yv(v): return pad+(vmax-v)/rng*(hh-2*pad)
+        zero=yv(0); out=f'<line x1="{pad}" y1="{zero:.0f}" x2="{w-pad}" y2="{zero:.0f}" stroke="{M}"/>'
+        n=len(vals); slot=(w-2*pad)/max(1,n); bw=slot*0.55
+        for i,d in enumerate(vals):
+            top=yv(max(cum[i],cum[i+1])); bot=yv(min(cum[i],cum[i+1])); bx=pad+i*slot+(slot-bw)/2
+            out+=f'<rect x="{bx:.0f}" y="{top:.0f}" width="{bw:.0f}" height="{max(2,bot-top):.0f}" rx="2" fill="{A if d>=0 else NEG}"/>'
+            out+=f'<text x="{bx+bw/2:.0f}" y="{(top-3) if d>=0 else (bot+11):.0f}" font-size="8" fill="{A if d>=0 else NEG}" text-anchor="middle">{d:+.0f}</text>'
+            out+=f'<text x="{bx+bw/2:.0f}" y="{hh-6}" font-size="8" fill="{SOFT}" text-anchor="middle">{labels[i][:6]}</text>'
+        return f'<svg viewBox="0 0 {w} {hh}" width="100%">{out}</svg>'
+    if ck in ("bar_ranked","bar") and vals:
+        mx=max(vals) or 1; n=len(vals); slot=(w-2*pad)/max(1,n); bw=slot*0.6; out=""
+        for i,v in enumerate(vals):
+            bh=v/mx*(hh-2*pad); bx=pad+i*slot+(slot-bw)/2; by=hh-pad-bh
+            out+=f'<rect x="{bx:.0f}" y="{by:.0f}" width="{bw:.0f}" height="{bh:.0f}" rx="3" fill="{A if i==0 else M}"/>'
+            out+=f'<text x="{bx+bw/2:.0f}" y="{by-3:.0f}" font-size="8" fill="{INK}" text-anchor="middle">{v:.0f}</text>'
+            out+=f'<text x="{bx+bw/2:.0f}" y="{hh-6}" font-size="8" fill="{SOFT}" text-anchor="middle">{labels[i][:6]}</text>'
+        return f'<svg viewBox="0 0 {w} {hh}" width="100%">{out}</svg>'
+    if ck in ("line","area") and vals:
+        mx=max(vals) or 1; mn=min(vals); rng=(mx-mn) or 1; n=len(vals); step=(w-2*pad)/max(1,n-1)
+        pts=" ".join(f"{pad+i*step:.0f},{hh-pad-(v-mn)/rng*(hh-2*pad):.0f}" for i,v in enumerate(vals))
+        fill=f'<polygon points="{pad},{hh-pad} {pts} {w-pad},{hh-pad}" fill="{A}" opacity="0.16"/>' if ck=="area" else ""
+        return f'<svg viewBox="0 0 {w} {hh}" width="100%">{fill}<polyline points="{pts}" fill="none" stroke="{A}" stroke-width="2.5"/></svg>'
+    if ck in ("donut","stacked100") and vals:
+        import math; tot=sum(vals) or 1; cx,cy,r=hh/2,hh/2,hh/2-14; a0=-math.pi/2; out=""
+        cols=[A,M,"#"+th["accent2"],SOFT,"#C9CCDA"]
+        for i,v in enumerate(vals):
+            a1=a0+v/tot*2*math.pi; x0=cx+r*math.cos(a0); y0=cy+r*math.sin(a0); x1=cx+r*math.cos(a1); y1=cy+r*math.sin(a1)
+            lg=1 if a1-a0>math.pi else 0
+            out+=f'<path d="M{cx},{cy} L{x0:.1f},{y0:.1f} A{r},{r} 0 {lg} 1 {x1:.1f},{y1:.1f} Z" fill="{cols[i%len(cols)]}"/>'; a0=a1
+        out+=f'<circle cx="{cx}" cy="{cy}" r="{r*0.58:.0f}" fill="#fff"/>'
+        return f'<svg viewBox="0 0 {w} {hh}" width="100%">{out}</svg>'
+    if ck=="scatter" and ch.get("x"):
+        xs=ch["x"][:120]; ys=ch["y"][:120]
+        xmn,xmx=min(xs),max(xs); ymn,ymx=min(ys),max(ys); xr=(xmx-xmn)or 1; yr=(ymx-ymn)or 1
+        dots="".join(f'<circle cx="{pad+(x-xmn)/xr*(w-2*pad):.0f}" cy="{hh-pad-(y-ymn)/yr*(hh-2*pad):.0f}" r="2.2" fill="{A}" opacity="0.6"/>' for x,y in zip(xs,ys))
+        return f'<svg viewBox="0 0 {w} {hh}" width="100%">{dots}</svg>'
+    return ""
 
-def _svg_chart(spec, th, w=470, h=190):
-    if not spec:
-        return ""
-    kind = spec.get("kind", "bar")
-    labels = [str(l) for l in spec["labels"]]
-    vals = [float(v) for v in spec["values"]]
-    mx = max(vals) if vals else 1
-    pad = 24
-    cols = [th["primary2"], th["accent"], th["blue"], th["green"], th["pink"], "#94A3B8"]
-    if kind == "line":
-        n = len(vals); step = (w - 2 * pad) / max(1, n - 1)
-        pts = " ".join(f"{pad + i*step:.0f},{h - pad - (v/mx)*(h-2*pad):.0f}" for i, v in enumerate(vals))
-        dots = "".join(f'<circle cx="{pad+i*step:.0f}" cy="{h-pad-(v/mx)*(h-2*pad):.0f}" r="3" fill="#{th["primary2"]}"/>' for i, v in enumerate(vals))
-        lbls = "".join(f'<text x="{pad+i*step:.0f}" y="{h-6}" font-size="8" fill="#{th["soft"]}" text-anchor="middle">{labels[i][:4]}</text>' for i in range(n))
-        return f'<svg viewBox="0 0 {w} {h}" width="100%"><polyline points="{pts}" fill="none" stroke="#{th["primary2"]}" stroke-width="2.5"/>{dots}{lbls}</svg>'
-    if kind == "pie":
-        import math
-        tot = sum(vals) or 1; cx, cy, r = h/2, h/2, h/2 - 12; a0 = -math.pi/2; segs = ""
-        for i, v in enumerate(vals):
-            a1 = a0 + (v/tot) * 2 * math.pi
-            x0, y0 = cx + r*math.cos(a0), cy + r*math.sin(a0)
-            x1, y1 = cx + r*math.cos(a1), cy + r*math.sin(a1)
-            large = 1 if (a1 - a0) > math.pi else 0
-            segs += f'<path d="M{cx},{cy} L{x0:.1f},{y0:.1f} A{r},{r} 0 {large} 1 {x1:.1f},{y1:.1f} Z" fill="{cols[i%len(cols)]}"/>'
-            a0 = a1
-        segs += f'<circle cx="{cx}" cy="{cy}" r="{r*0.55:.0f}" fill="#fff"/>'
-        leg = "".join(f'<text x="{h+10}" y="{20+i*16}" font-size="9" fill="#{th["ink"]}">■ {labels[i][:14]}</text>'.replace("■", f'<tspan fill="{cols[i%len(cols)]}">■</tspan>') for i in range(len(vals)))
-        return f'<svg viewBox="0 0 {w} {h}" width="100%">{segs}{leg}</svg>'
-    # bar
-    n = len(vals); bw = (w - 2*pad) / max(1, n) * 0.62; gap = (w - 2*pad) / max(1, n)
-    bars = ""
-    for i, v in enumerate(vals):
-        bh = (v/mx) * (h - 2*pad); bx = pad + i*gap + (gap-bw)/2; by = h - pad - bh
-        bars += f'<rect x="{bx:.0f}" y="{by:.0f}" width="{bw:.0f}" height="{bh:.0f}" rx="3" fill="{cols[i%len(cols)]}"/>'
-        bars += f'<text x="{bx+bw/2:.0f}" y="{by-3:.0f}" font-size="8" fill="#{th["ink"]}" text-anchor="middle">{v:.0f}</text>'
-        bars += f'<text x="{bx+bw/2:.0f}" y="{h-6}" font-size="8" fill="#{th["soft"]}" text-anchor="middle">{labels[i][:5]}</text>'
-    return f'<svg viewBox="0 0 {w} {h}" width="100%">{bars}</svg>'
 
-
-def render_html_slide(sl, meta):
-    th = DECK_THEMES[meta["theme"]]
-    P, P2, AC = "#" + th["primary"], "#" + th["primary2"], "#" + th["accent"]
-    INK, SOFT, LINE = "#" + th["ink"], "#" + th["soft"], "#" + th["line"]
-    SURF = "#" + th["surface"]
-    base = f'font-family:Inter,system-ui,sans-serif;border-radius:12px;overflow:hidden;'
-    frame = f'width:100%;aspect-ratio:16/9;background:#fff;border:1px solid {LINE};{base}position:relative;box-shadow:0 2px 10px rgba(0,0,0,0.06);'
-    k = sl["kind"]
-
-    def card(inner): return f'<div style="{frame}">{inner}</div>'
-
-    if k == "title":
+def render_consultant_html(sl, meta):
+    th=_theme(meta["theme"], meta["font"])
+    A="#"+th["accent"]; A2="#"+th["accent2"]; INK="#"+th["ink"]; SOFT="#"+th["soft"]
+    LINE="#"+th["line"]; TAG="#"+th["tagbg"]; TAGINK="#"+th["tagink"]; CAN="#"+th["canvas"]; PANEL="#"+th["panel"]
+    frame=f'width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;position:relative;font-family:Inter,system-ui,sans-serif;border:1px solid {LINE};box-shadow:0 2px 10px rgba(0,0,0,0.06);'
+    def card(inner, bgc="#fff"): return f'<div style="{frame}background:{bgc};">{inner}</div>'
+    def tagline(tag,title,tc=INK):
+        return (f'<div style="position:absolute;left:4%;top:7%;background:{TAG};color:{TAGINK};font-size:0.55rem;'
+                f'font-weight:700;letter-spacing:1.5px;padding:3px 12px;border-radius:20px;">{tag.upper()}</div>'
+                f'<div style="position:absolute;left:4%;top:15%;right:5%;font-size:1.5rem;font-weight:800;color:{tc};line-height:1.1;">{title}</div>')
+    k=sl["kind"]
+    if k=="title":
         return card(
-            f'<div style="position:absolute;inset:0;background:{P};"></div>'
-            f'<div style="position:absolute;left:0;top:0;bottom:0;width:1.4%;background:{AC};"></div>'
-            f'<div style="position:absolute;left:5%;top:24%;color:{AC};font-size:0.75rem;font-weight:700;letter-spacing:3px;">KITEIQX INTELLIGENCE</div>'
-            f'<div style="position:absolute;left:5%;top:34%;right:8%;color:#fff;font-size:2.4rem;font-weight:800;line-height:1.1;">{sl["title"]}</div>'
-            f'<div style="position:absolute;left:5%;top:66%;right:20%;color:#C7C3E8;font-size:1rem;">{sl.get("subtitle","")}</div>'
-            f'<div style="position:absolute;left:5%;bottom:8%;color:{AC};font-size:0.8rem;">{sl.get("date","")}</div>'
-        )
-
-    if k == "dashboard":
-        kpis = "".join(
-            f'<div style="flex:1;background:#fff;border:1px solid {LINE};border-radius:10px;padding:8px 10px;display:flex;gap:8px;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,0.05);">'
-            f'<div style="width:34px;height:34px;border-radius:50%;background:#{th[kp["ck"]]};color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.95rem;flex:0 0 34px;">{kp["glyph"]}</div>'
-            f'<div style="min-width:0;"><div style="font-size:0.5rem;color:{SOFT};font-weight:700;letter-spacing:0.5px;">{kp["label"]}</div>'
-            f'<div style="font-size:1.05rem;font-weight:800;color:#{th[kp["ck"]]};line-height:1.1;">{kp["value"]}</div>'
-            f'<div style="font-size:0.5rem;color:{SOFT};">{kp["sub"]}</div></div></div>'
-            for kp in sl.get("kpis", [])[:4]
-        )
-        ins = "".join(
-            f'<div style="display:flex;gap:7px;margin-bottom:7px;align-items:flex-start;">'
-            f'<div style="width:24px;height:24px;border-radius:50%;background:{SURF};color:{P2};display:flex;align-items:center;justify-content:center;font-size:0.7rem;flex:0 0 24px;">{it["glyph"]}</div>'
-            f'<div style="font-size:0.56rem;color:{INK};line-height:1.25;"><b>{it["head"]}</b> '
-            f'<span style="color:{P2};font-weight:700;">{it.get("stat","")}</span><br>'
-            f'<span style="color:{SOFT};">{it.get("text","")[:90]}</span></div></div>'
-            for it in sl.get("insights", [])[:4]
-        )
+            f'<div style="position:absolute;left:0;top:0;bottom:0;width:1.5%;background:{A2};"></div>'
+            f'<div style="position:absolute;left:5%;top:22%;color:#fff;font-size:0.7rem;font-weight:700;letter-spacing:3px;">{sl.get("date","").upper()}</div>'
+            f'<div style="position:absolute;left:5%;top:32%;right:8%;color:#fff;font-size:2.2rem;font-weight:800;line-height:1.08;">{sl["title"]}</div>'
+            f'<div style="position:absolute;left:5%;top:66%;right:12%;color:#EDEBFF;font-size:0.95rem;">{sl.get("subtitle","")}</div>', bgc=A)
+    if k=="storyline":
+        flow=sl.get("flow",[]); n=len(flow); chips=""
+        for i,st in enumerate(flow):
+            bg = A if i==0 else A2 if i==n-1 else PANEL
+            tc = "#fff" if i in (0,n-1) else INK
+            arrow = "" if i==n-1 else f'<div style="color:{SOFT};font-size:1rem;align-self:center;">→</div>'
+            chips+=(f'<div style="flex:1;background:{bg};color:{tc};border:1px solid {LINE};border-radius:10px;'
+                    f'padding:14px 6px;text-align:center;font-size:0.7rem;font-weight:700;">{i+1}<br>{st}</div>{arrow}')
+        return card(tagline("Storyline", sl.get("title",""))+
+            f'<div style="position:absolute;left:4%;right:4%;top:42%;display:flex;gap:6px;align-items:stretch;">{chips}</div>'
+            f'<div style="position:absolute;left:4%;top:72%;color:{SOFT};font-size:0.6rem;">Structure: {sl.get("style_name","")}</div>', bgc=CAN)
+    if k=="finding":
+        facts=sl.get("facts",{}); big=facts.get("contribution_pct") or facts.get("share") or facts.get("pct") or facts.get("r","")
+        svg=_svg_for(sl.get("chart_kind"), sl.get("chart"), th)
+        bigbox=(f'<div style="background:{TAG};border-radius:8px;padding:8px;text-align:center;margin-bottom:8px;">'
+                f'<div style="font-size:1.4rem;font-weight:800;color:{TAGINK};">{big}</div>'
+                f'<div style="font-size:0.5rem;color:{SOFT};">key figure</div></div>') if big else ""
+        return card(tagline(sl["tag"], sl["title"])+
+            f'<div style="position:absolute;left:4%;top:30%;width:58%;bottom:5%;">{svg}</div>'
+            f'<div style="position:absolute;right:4%;top:30%;width:31%;">{bigbox}'
+            f'<div style="font-size:0.62rem;color:{INK};line-height:1.4;">{sl.get("narrative","")}</div></div>', bgc=CAN)
+    if k=="actions":
+        rows=""
+        for i,t in enumerate(sl.get("items",[])[:3]):
+            c=[A,A2,SOFT][i%3]
+            rows+=(f'<div style="display:flex;margin-bottom:8px;border:1px solid {LINE};border-radius:8px;overflow:hidden;background:#fff;">'
+                   f'<div style="background:{c};color:#fff;width:38px;display:flex;align-items:center;justify-content:center;font-weight:800;">{i+1}</div>'
+                   f'<div style="padding:9px 12px;font-size:0.66rem;color:{INK};">{t}</div></div>')
+        return card(tagline("Action plan", sl["title"])+
+            f'<div style="position:absolute;left:4%;right:4%;top:30%;">{rows}</div>', bgc=CAN)
+    if k=="closing":
         return card(
-            f'<div style="position:absolute;left:3%;top:5%;width:1%;height:8%;background:{P2};"></div>'
-            f'<div style="position:absolute;left:5.5%;top:4%;font-size:1.25rem;font-weight:800;color:{INK};">{sl["title"]}</div>'
-            f'<div style="position:absolute;left:3.5%;right:3.5%;top:15%;background:{SURF};border-radius:8px;padding:6px 12px;font-size:0.6rem;color:{INK};">💡 {sl.get("banner","")[:160]}</div>'
-            f'<div style="position:absolute;left:3.5%;right:3.5%;top:27%;display:flex;gap:6px;">{kpis}</div>'
-            f'<div style="position:absolute;left:3.5%;top:48%;width:62%;bottom:13%;background:#fff;border:1px solid {LINE};border-radius:8px;padding:6px;">'
-            f'<div style="display:inline-block;background:{P};color:#fff;font-size:0.5rem;font-weight:700;padding:2px 10px;border-radius:20px;">{(sl.get("chart") or {}).get("title","OVERVIEW").upper()}</div>'
-            f'{_svg_chart(sl.get("chart"), th)}</div>'
-            f'<div style="position:absolute;right:3.5%;top:48%;width:30%;bottom:13%;background:#fff;border:1px solid {LINE};border-radius:8px;padding:6px;">'
-            f'<div style="background:{P};color:#fff;font-size:0.55rem;font-weight:700;padding:2px 0;border-radius:20px;text-align:center;margin-bottom:6px;">KEY INSIGHTS</div>{ins}</div>'
-            f'<div style="position:absolute;left:3.5%;right:3.5%;bottom:3%;background:#{th["surface3"]};border-radius:8px;padding:5px 12px;font-size:0.58rem;color:{INK};">💡 {sl.get("footer","")[:150]}</div>'
-        )
+            f'<div style="position:absolute;left:0;top:0;bottom:0;width:1.5%;background:{A2};"></div>'
+            f'<div style="position:absolute;left:5%;top:22%;color:#EDEBFF;font-size:0.7rem;font-weight:700;letter-spacing:3px;">KITEIQX INTELLIGENCE</div>'
+            f'<div style="position:absolute;left:5%;top:34%;right:14%;color:#fff;font-size:1.8rem;font-weight:800;">{sl.get("message","")}</div>', bgc=A)
+    return card(f'<div style="padding:20px;">{k}</div>', bgc=CAN)
 
-    if k == "story_chart":
-        ins = "".join(
-            f'<div style="margin-bottom:8px;font-size:0.58rem;color:{INK};line-height:1.3;"><b>{it["head"]}</b><br><span style="color:{SOFT};">{it.get("text","")[:120]}</span></div>'
-            for it in sl.get("insights", [])[:3]
-        )
-        statbox = (f'<div style="background:{SURF};border-radius:8px;padding:10px;text-align:center;margin-bottom:10px;">'
-                   f'<div style="font-size:1.8rem;font-weight:800;color:{P2};">{sl.get("stat_value","")}</div>'
-                   f'<div style="font-size:0.55rem;color:{SOFT};">{sl.get("stat_label","")}</div></div>') if sl.get("stat_value") else ""
-        return card(
-            f'<div style="position:absolute;left:3%;top:5%;width:1%;height:8%;background:{P2};"></div>'
-            f'<div style="position:absolute;left:5.5%;top:4%;font-size:1.2rem;font-weight:800;color:{INK};">{sl["title"]}</div>'
-            f'<div style="position:absolute;left:3.5%;right:3.5%;top:15%;background:{SURF};border-radius:8px;padding:6px 12px;font-size:0.6rem;color:{INK};">📈 {sl.get("banner","")[:160]}</div>'
-            f'<div style="position:absolute;left:3.5%;top:27%;width:62%;bottom:5%;background:#fff;border:1px solid {LINE};border-radius:8px;padding:8px;">'
-            f'<div style="display:inline-block;background:{P};color:#fff;font-size:0.5rem;font-weight:700;padding:2px 10px;border-radius:20px;">{sl["chart"].get("title","DETAIL").upper()}</div>'
-            f'{_svg_chart(sl.get("chart"), th, h=230)}</div>'
-            f'<div style="position:absolute;right:3.5%;top:27%;width:30%;bottom:5%;background:#fff;border:1px solid {LINE};border-radius:8px;padding:10px;">'
-            f'{statbox}<div style="font-size:0.6rem;font-weight:700;color:{INK};margin-bottom:6px;">WHY IT MATTERS</div>{ins}</div>'
-        )
-
-    if k == "big_stat":
-        return card(
-            f'<div style="position:absolute;inset:0;background:{P};"></div>'
-            f'<div style="position:absolute;left:0;top:0;bottom:0;width:1.4%;background:{AC};"></div>'
-            f'<div style="position:absolute;left:6%;top:14%;right:6%;color:#fff;font-size:1.3rem;font-weight:800;">{sl["title"]}</div>'
-            f'<div style="position:absolute;left:5.5%;top:28%;color:{AC};font-size:5rem;font-weight:800;line-height:1;">{sl.get("stat_value","")}</div>'
-            f'<div style="position:absolute;left:6%;top:62%;color:#C7C3E8;font-size:0.9rem;letter-spacing:1px;">{sl.get("stat_label","").upper()}</div>'
-            f'<div style="position:absolute;left:6%;top:72%;right:8%;color:#E5E3F5;font-size:0.85rem;line-height:1.4;">{sl.get("body","")}</div>'
-        )
-
-    if k == "takeaways":
-        rows = "".join(
-            f'<div style="display:flex;margin-bottom:10px;border:1px solid {LINE};border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.05);">'
-            f'<div style="background:{[P2,AC,"#"+th["blue"]][i%3]};color:#fff;width:42px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:800;flex:0 0 42px;">{i+1}</div>'
-            f'<div style="padding:10px 14px;font-size:0.72rem;color:{INK};display:flex;align-items:center;">{t}</div></div>'
-            for i, t in enumerate(sl.get("items", [])[:3])
-        )
-        return card(
-            f'<div style="position:absolute;left:3%;top:5%;width:1%;height:8%;background:{P2};"></div>'
-            f'<div style="position:absolute;left:5.5%;top:4%;font-size:1.25rem;font-weight:800;color:{INK};">{sl["title"]}</div>'
-            f'<div style="position:absolute;left:3.5%;right:3.5%;top:20%;">{rows}</div>'
-        )
-
-    if k == "quality":
-        sc = sl.get("score", 85)
-        clr = ("#" + th["green"]) if sc >= 90 else ("#" + th["blue"]) if sc >= 75 else AC if sc >= 60 else ("#" + th["pink"])
-        return card(
-            f'<div style="position:absolute;left:3%;top:5%;width:1%;height:8%;background:{P2};"></div>'
-            f'<div style="position:absolute;left:5.5%;top:4%;font-size:1.25rem;font-weight:800;color:{INK};">{sl["title"]}</div>'
-            f'<div style="position:absolute;left:6%;top:30%;width:150px;height:150px;border-radius:50%;border:7px solid {clr};display:flex;flex-direction:column;align-items:center;justify-content:center;">'
-            f'<div style="font-size:2.6rem;font-weight:800;color:{clr};">{sc}</div><div style="color:{clr};font-size:0.7rem;">/ 100</div></div>'
-            f'<div style="position:absolute;left:36%;right:6%;top:30%;"><div style="font-size:0.75rem;font-weight:700;color:{INK};letter-spacing:0.5px;margin-bottom:8px;">QUALITY SUMMARY</div>'
-            f'<div style="font-size:0.78rem;color:{INK};line-height:1.6;">{sl.get("summary","")}</div></div>'
-        )
-
-    if k == "closing":
-        return card(
-            f'<div style="position:absolute;inset:0;background:{P};"></div>'
-            f'<div style="position:absolute;left:0;top:0;bottom:0;width:1.4%;background:{AC};"></div>'
-            f'<div style="position:absolute;left:5%;top:22%;color:{AC};font-size:0.75rem;font-weight:700;letter-spacing:3px;">KITEIQX INTELLIGENCE</div>'
-            f'<div style="position:absolute;left:5%;top:34%;right:25%;color:#fff;font-size:2rem;font-weight:800;line-height:1.15;">{sl.get("message","")}</div>'
-            f'<div style="position:absolute;left:5%;bottom:12%;color:#9A93C8;font-size:0.8rem;">Generated by KiteIQX Intelligence · {sl.get("date","")}</div>'
-        )
-
-    return card(f'<div style="padding:20px;color:{INK};">{k}</div>')
 
 
 
 # ============================================================
-# PRESENTATION MAKER — conversational agent + preview/edit UI
+# PRESENTATION MAKER — consultant agent UI
 # ============================================================
-
-import streamlit.components.v1 as _components
-
-
-_CHAT_STEPS = [
-    {"key": "goal", "q": "What's the goal of this deck?",
-     "opts": ["Performance review", "Growth pitch", "Risk & quality review",
-              "Investor update", "Board summary"]},
-    {"key": "audience", "q": "Who's the audience?",
-     "opts": ["Leadership / CXO", "Board", "Investors", "Team / Ops", "Clients"]},
-]
+import streamlit.components.v1 as _cmp
 
 
 def _pm_reset():
-    for k in ["pm_stage", "pm_chat", "pm_answers", "pm_stories_pool",
-              "pm_selected_ids", "pm_spec", "pm_theme", "pm_font", "pm_step_i"]:
-        st.session_state.pop(k, None)
+    for k in list(st.session_state.keys()):
+        if k.startswith("pm2_"):
+            st.session_state.pop(k, None)
 
 
 def render_presentation_maker():
     a = st.session_state.get("analytics")
     if a is None:
-        st.info("Load data first (sidebar), then come back to build your story deck.")
+        st.info("Load data first (sidebar), then come back to build your story.")
         return
-    if not PPTX_OK:
+    if not _CONSULT_OK:
         st.error("`python-pptx` isn't installed. Add `python-pptx` to requirements.txt and redeploy.")
         return
 
     st.markdown(
         '<div class="kx-card"><div class="kx-card-title">Presentation Maker</div>'
-        '<div class="kx-card-sub">A story producer that mines your data for the strongest findings, '
-        'chats with you about what to emphasize, then builds an editable, Gamma-style deck.</div></div>',
+        '<div class="kx-card-sub">A consultant agent that decomposes your data to find what is really driving '
+        'the numbers, proposes a storyline, and builds an editable, visual-flow deck.</div></div>',
         unsafe_allow_html=True,
     )
 
-    # initialise state machine
-    if "pm_stage" not in st.session_state:
-        st.session_state.pm_stage = "intro"
-        st.session_state.pm_chat = []
-        st.session_state.pm_answers = {}
-        st.session_state.pm_step_i = 0
+    if "pm2_stage" not in st.session_state:
+        st.session_state.pm2_stage = "analyze"
+        st.session_state.pm2_framing = {}
+        st.session_state.pm2_q = 0
 
-    stage = st.session_state.pm_stage
-
-    # ---- top controls: theme/font picker (offered each time) ----
-    tcol, fcol, rcol = st.columns([2, 2, 1])
-    with tcol:
-        theme_name = st.selectbox("Visual style", list(DECK_THEMES.keys()),
-                                  index=0, key="pm_theme")
-    with fcol:
-        font_name = st.selectbox("Font pairing", list(DECK_FONTS.keys()),
-                                 index=0, key="pm_font")
-    with rcol:
+    # theme/font/style pickers + restart
+    c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
+    theme_name = c1.selectbox("Visual style", list(CONSULT_THEMES.keys()), key="pm2_theme")
+    font_name = c2.selectbox("Font", list(CONSULT_FONTS.keys()), key="pm2_font")
+    style_label = c3.selectbox("Storyboard structure", list(STORYBOARD_STYLES.keys()), key="pm2_style")
+    with c4:
         st.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)
-        if st.button("↺ Restart", key="pm_restart", use_container_width=True):
+        if st.button("↺ Restart", key="pm2_restart", use_container_width=True):
             _pm_reset(); st.rerun()
-
+    st.caption(STORYBOARD_STYLES[style_label]["blurb"])
     st.markdown("---")
 
-    # ============================================================
-    # STAGE 1 — INTRO: mine stories, kick off the chat
-    # ============================================================
-    if stage == "intro":
-        with st.spinner("Mining your data for the strongest stories…"):
-            miner = StoryMiner(a)
-            st.session_state.pm_stories_pool = miner.top(10)
-        st.session_state.pm_stage = "chat"
-        st.session_state.pm_chat = [
-            ("assistant",
-             "I went through your dataset and pulled the strongest stories. "
-             "Let me ask a couple of quick questions, then you'll pick which stories to feature.")
-        ]
+    stage = st.session_state.pm2_stage
+
+    # ---- ANALYZE: run the consultant engine ----
+    if stage == "analyze":
+        with st.spinner("Decomposing the data and tracing what's driving the numbers…"):
+            ctx, findings = derive_findings(a)
+            for f in findings:                # attach narration lazily later
+                f.narrative = None
+            st.session_state.pm2_ctx_modes = ctx.modes
+            st.session_state.pm2_primary, st.session_state.pm2_bits = ctx.describe()
+            st.session_state.pm2_findings = findings
+        st.session_state.pm2_stage = "frame"
         st.rerun()
 
-    miner = StoryMiner(a)  # cheap; deterministic
-    pool = st.session_state.get("pm_stories_pool") or miner.top(10)
+    ctx_bits = st.session_state.get("pm2_bits", [])
+    findings = st.session_state.get("pm2_findings", [])
 
-    # ============================================================
-    # STAGE 2 — CHAT: ask goal + audience conversationally
-    # ============================================================
-    if stage == "chat":
-        # render conversation so far
-        for role, msg in st.session_state.pm_chat:
-            with st.chat_message("assistant" if role == "assistant" else "user"):
-                st.markdown(msg)
+    # rebuild a lightweight ctx-like object for spec building
+    class _Ctx:  # minimal shim carrying what the spec builder needs
+        def __init__(s, modes, primary): s.modes = modes; s._p = primary
+        def describe(s): return s._p, []
+    ctx = _Ctx(st.session_state.get("pm2_ctx_modes", []), st.session_state.get("pm2_primary", "profile"))
 
-        step_i = st.session_state.pm_step_i
-        if step_i < len(_CHAT_STEPS):
-            step = _CHAT_STEPS[step_i]
+    # ---- FRAME: conversational framing questions ----
+    if stage == "frame":
+        with st.chat_message("assistant"):
+            st.markdown("Here's what I can build from your data:")
+            for b in ctx_bits:
+                st.markdown(f"- {b}")
+            st.markdown("A few quick questions so I storyboard it the way a consultant would 👇")
+
+        FQ = [
+            ("decision", "What decision should this deck drive?",
+             ["Where to invest / cut", "Explain a result", "Win buy-in / pitch", "Just a status update"]),
+            ("audience", "Who's the audience?",
+             ["Board / CXO", "Investors", "Team / Ops", "Clients"]),
+        ]
+        qi = st.session_state.pm2_q
+        if qi < len(FQ):
+            key, q, opts = FQ[qi]
             with st.chat_message("assistant"):
-                st.markdown(f"**{step['q']}**")
-                cols = st.columns(len(step["opts"]))
-                for j, opt in enumerate(step["opts"]):
-                    if cols[j].button(opt, key=f"pm_opt_{step_i}_{j}", use_container_width=True):
-                        st.session_state.pm_answers[step["key"]] = opt
-                        st.session_state.pm_chat.append(("assistant", step["q"]))
-                        st.session_state.pm_chat.append(("user", opt))
-                        st.session_state.pm_step_i += 1
+                st.markdown(f"**{q}**")
+                cols = st.columns(len(opts))
+                for j, o in enumerate(opts):
+                    if cols[j].button(o, key=f"pm2_fq_{qi}_{j}", use_container_width=True):
+                        st.session_state.pm2_framing[key] = o
+                        st.session_state.pm2_q += 1
                         st.rerun()
         else:
-            # free-text emphasis, then move to story selection
             with st.chat_message("assistant"):
-                st.markdown("**Anything specific to emphasize?** (optional — e.g. *focus on the "
-                            "concentration risk*, or *frame it as a growth opportunity*)")
-            emph = st.chat_input("Type emphasis or just hit send to skip…")
-            if emph is not None:
-                st.session_state.pm_answers["emphasis"] = emph.strip()
-                if emph.strip():
-                    st.session_state.pm_chat.append(("user", emph.strip()))
-                st.session_state.pm_stage = "select"
-                st.rerun()
-            cskip, _ = st.columns([1, 4])
-            if cskip.button("Skip", key="pm_skip_emph"):
-                st.session_state.pm_answers["emphasis"] = ""
-                st.session_state.pm_stage = "select"
+                st.markdown("**One line — what's the single thing they must leave knowing?** (optional)")
+            tk = st.chat_input("Type the key takeaway, or skip…")
+            cskip, _ = st.columns([1, 5])
+            go = cskip.button("Skip", key="pm2_skip_tk")
+            if tk is not None or go:
+                st.session_state.pm2_framing["takeaway"] = (tk or "").strip()
+                st.session_state.pm2_stage = "storyboard"
                 st.rerun()
 
-    # ============================================================
-    # STAGE 3 — SELECT: choose which mined stories to feature
-    # ============================================================
-    elif stage == "select":
-        for role, msg in st.session_state.pm_chat:
-            with st.chat_message("assistant" if role == "assistant" else "user"):
-                st.markdown(msg)
+    # ---- STORYBOARD: agent drafts ordered narrative + reasoning ----
+    elif stage == "storyboard":
+        framing = st.session_state.pm2_framing
+        if "pm2_sb" not in st.session_state:
+            with st.spinner("Drafting the storyline…"):
+                sb = draft_storyboard(findings, framing, a.llm)
+                # also let the chosen STYLE re-order if user picked a non-SCR structure
+                style_key = STORYBOARD_STYLES[style_label]["key"]
+                style_order, _flow = order_findings_by_style(findings, style_key)
+                # prefer the agent order but keep only findings present
+                st.session_state.pm2_sb = sb
+                st.session_state.pm2_style_order = style_order
+        sb = st.session_state.pm2_sb
         with st.chat_message("assistant"):
-            st.markdown("Here are the **top stories** I found. Tick the ones you want in the deck "
-                        "(I've pre-selected the strongest). Then hit **Build deck**.")
+            st.markdown("**Here's the storyline I'd tell:**")
+            st.markdown(f"_{sb['reasoning']}_")
+            for n, oi in enumerate(sb["order"], 1):
+                f = findings[oi]
+                st.markdown(f"{n}. **{f.role.replace('_',' ').title()}** — {f.fact_brief()[:110]}")
+            st.markdown("Approve to build, or tell me what to change.")
+        cc1, cc2 = st.columns([1, 1])
+        if cc1.button("✓ Approve & build", type="primary", key="pm2_approve", use_container_width=True):
+            st.session_state.pm2_stage = "build"; st.rerun()
+        redirect = cc2.text_input("Redirect (e.g. 'lead with the action', 'drop the correlation')",
+                                  key="pm2_redirect")
+        if st.button("Apply redirect", key="pm2_redirect_btn") and redirect.strip():
+            if a.llm:
+                try:
+                    sb2 = draft_storyboard(findings, {**framing, "decision": framing.get("decision","") + " | " + redirect}, a.llm)
+                    st.session_state.pm2_sb = sb2
+                    st.rerun()
+                except Exception:
+                    st.warning("Couldn't apply — try rephrasing.")
+            else:
+                st.warning("AI engine not configured; using the structure picker above instead.")
 
-        if "pm_selected_ids" not in st.session_state:
-            st.session_state.pm_selected_ids = [s["id"] for s in pool[:6]]
+    # ---- BUILD: choose visuals + narrate + assemble spec ----
+    elif stage in ("build", "review"):
+        framing = st.session_state.pm2_framing
+        if "pm2_spec" not in st.session_state:
+            sb = st.session_state.pm2_sb
+            order = sb["order"]
+            visuals, narrations = {}, {}
+            with st.spinner("Choosing the right visual for each finding and writing the narrative…"):
+                for oi in order:
+                    f = findings[oi]
+                    v = propose_visual(f, a.llm, framing.get("audience", "leadership"))
+                    visuals[oi] = v
+                    narrations[oi] = narrate_finding(f, framing, a.llm)
+                    findings[oi].narrative = narrations[oi]
+                # recommendations: from action findings or LLM
+                recs = []
+                if a.llm:
+                    try:
+                        heads = "; ".join(findings[i].fact_brief()[:90] for i in order[:5])
+                        out = a.llm.predict(
+                            f"Findings: {heads}\nDecision: {framing.get('decision','')}. "
+                            "Give 3 specific, numbered action recommendations a consultant would put on the final slide. "
+                            "Return ONLY JSON: {\"recs\":[\"\",\"\",\"\"],\"title\":\"<=6 word deck title\",\"closing\":\"one line\"}",
+                            max_tokens=380)
+                        import json as _j, re as _r
+                        p = _j.loads(_r.sub(r"```json|```", "", out).strip())
+                        recs = p.get("recs", [])[:3]
+                        framing.setdefault("title", p.get("title", ""))
+                        framing["closing"] = p.get("closing", "The data points to a clear next move.")
+                    except Exception:
+                        pass
+                if not recs:
+                    recs = [narrations[i] for i in order[:3]]
+                framing["recommendations"] = recs
+                style_key = STORYBOARD_STYLES[style_label]["key"]
+                spec = build_consultant_spec(a, findings, ctx, framing, theme_name, font_name,
+                                             style_key, order, narrations, visuals)
+            st.session_state.pm2_spec = spec
+            st.session_state.pm2_stage = "review"
 
-        sel = []
-        for s in pool:
-            checked = st.checkbox(
-                f"**{s['headline']}**  ·  `{s.get('stat_value','')}`  —  {s['detail']}",
-                value=(s["id"] in st.session_state.pm_selected_ids),
-                key=f"pm_chk_{s['id']}",
-            )
-            if checked:
-                sel.append(s["id"])
-        st.session_state.pm_selected_ids = sel
-
-        bcol, ccol = st.columns([1, 4])
-        if bcol.button("Build deck →", type="primary", key="pm_build",
-                       disabled=(len(sel) == 0), use_container_width=True):
-            chosen = [s for s in pool if s["id"] in sel]
-            with st.spinner("Framing the narrative and laying out slides…"):
-                spec = build_deck_spec(a, miner, chosen, st.session_state.pm_answers,
-                                       st.session_state.pm_theme, st.session_state.pm_font)
-            st.session_state.pm_spec = spec
-            st.session_state.pm_stage = "review"
-            st.rerun()
-        if len(sel) == 0:
-            ccol.caption("Select at least one story to continue.")
-
-    # ============================================================
-    # STAGE 4 — REVIEW: visual preview + inline editing + download
-    # ============================================================
-    elif stage == "review":
-        spec = st.session_state.pm_spec
-        # keep theme/font in sync with current pickers (lets user restyle without rebuild)
-        spec["meta"]["theme"] = st.session_state.pm_theme
-        spec["meta"]["font"] = st.session_state.pm_font
+        spec = st.session_state.pm2_spec
+        spec["meta"]["theme"] = theme_name; spec["meta"]["font"] = font_name
 
         st.markdown(
-            f'<div class="kx-callout"><strong>Your deck is ready — {len(spec["slides"])} slides.</strong> '
-            "Preview each slide below and edit any text inline. Change the visual style or font up top "
-            "and the preview updates instantly. Download when you're happy.</div>",
+            f'<div class="kx-callout"><strong>Deck ready — {len(spec["slides"])} slides.</strong> '
+            "Preview each slide, edit any text inline, restyle from the pickers up top, then download.</div>",
             unsafe_allow_html=True,
         )
 
-        # AI refine box (conversational agent loop)
-        with st.expander("💬 Ask the producer to refine the deck"):
-            refine = st.text_input("e.g. 'make the tone punchier', 'add a recommendation about pricing'",
-                                   key="pm_refine_input")
-            if st.button("Apply refinement", key="pm_refine_btn") and refine.strip():
-                if a.llm:
-                    try:
-                        cur = _json.dumps({"title": spec["meta"]["title"],
-                                           "subtitle": spec["meta"]["subtitle"],
-                                           "recommendations": next((s["items"] for s in spec["slides"]
-                                                                    if s["kind"] == "takeaways"), [])})
-                        out = a.llm.predict(
-                            f"Current deck framing: {cur}\nUser refinement: {refine}\n"
-                            "Return ONLY JSON: {\"title\":\"\",\"subtitle\":\"\",\"recommendations\":[\"\",\"\",\"\"]}",
-                            max_tokens=380)
-                        p = _json.loads(_re.sub(r"```json|```", "", out).strip())
-                        spec["meta"]["title"] = p.get("title", spec["meta"]["title"])
-                        spec["meta"]["subtitle"] = p.get("subtitle", spec["meta"]["subtitle"])
-                        for s in spec["slides"]:
-                            if s["kind"] == "title":
-                                s["title"], s["subtitle"] = spec["meta"]["title"], spec["meta"]["subtitle"]
-                            if s["kind"] == "takeaways" and p.get("recommendations"):
-                                s["items"] = p["recommendations"][:3]
-                        st.success("Applied. Scroll to see the changes.")
-                    except Exception:
-                        st.warning("Couldn't parse the AI response — try rephrasing.")
-                else:
-                    st.warning("AI engine not configured, so refinement is unavailable.")
-
-        # per-slide preview + editor
         for i, sl in enumerate(spec["slides"]):
-            kind = sl["kind"]
-            st.markdown(f"**Slide {i+1} — {kind.replace('_',' ').title()}**")
-            pv_col, ed_col = st.columns([3, 2])
-            with pv_col:
-                _components.html(render_html_slide(sl, spec["meta"]), height=300, scrolling=False)
-            with ed_col:
-                _slide_editor(sl, i)
-            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            st.markdown(f"**Slide {i+1} — {sl['kind'].replace('_',' ').title()}**")
+            pv, ed = st.columns([3, 2])
+            with pv:
+                _cmp.html(render_consultant_html(sl, spec["meta"]), height=290)
+            with ed:
+                _consult_editor(sl, i)
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
         st.markdown("---")
-        # build + download
-        gcol, _ = st.columns([2, 4])
-        if gcol.button("⬇ Generate & download .pptx", type="primary",
-                       key="pm_export", use_container_width=True):
-            out_dir = _Path("data/uploads"); out_dir.mkdir(parents=True, exist_ok=True)
-            ts = _dt.now().strftime("%Y%m%d_%H%M%S")
-            fname = st.session_state.get("upload_filename", "deck").replace(".", "_")
-            out_path = str(out_dir / f"KiteIQX_{fname}_{ts}.pptx")
+        if st.button("⬇ Generate & download .pptx", type="primary", key="pm2_export"):
+            from pathlib import Path as _P
+            from datetime import datetime as _dtm
+            outdir = _P("data/uploads"); outdir.mkdir(parents=True, exist_ok=True)
+            fn = st.session_state.get("upload_filename", "deck").replace(".", "_")
+            outp = str(outdir / f"KiteIQX_{fn}_{_dtm.now():%Y%m%d_%H%M%S}.pptx")
             with st.spinner("Rendering PowerPoint…"):
-                ok, msg = build_pptx(spec, out_path)
+                ok, msg = build_consultant_pptx(spec, outp, _CHARTS_NS)
             if ok:
-                st.session_state.pm_out_path = out_path
-                st.success(msg)
+                st.session_state.pm2_out = outp; st.success(msg)
             else:
                 st.error(msg)
+        if st.session_state.get("pm2_out"):
+            from pathlib import Path as _P
+            if _P(st.session_state.pm2_out).exists():
+                with open(st.session_state.pm2_out, "rb") as fh:
+                    st.download_button("Download your deck", fh.read(),
+                                       file_name=_P(st.session_state.pm2_out).name,
+                                       mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                                       key="pm2_dl")
 
-        if st.session_state.get("pm_out_path") and _Path(st.session_state["pm_out_path"]).exists():
-            with open(st.session_state["pm_out_path"], "rb") as f:
-                st.download_button("Download your deck", f.read(),
-                                   file_name=_Path(st.session_state["pm_out_path"]).name,
-                                   mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                                   key="pm_dl", use_container_width=False)
 
-
-def _slide_editor(sl, i):
-    """Inline editors that mutate the slide spec in place."""
+def _consult_editor(sl, i):
     k = sl["kind"]
     if "title" in sl:
-        sl["title"] = st.text_input("Title", sl.get("title", ""), key=f"pm_e_title_{i}")
+        sl["title"] = st.text_input("Title", sl.get("title",""), key=f"pm2_e_t_{i}")
     if k == "title":
-        sl["subtitle"] = st.text_input("Subtitle", sl.get("subtitle", ""), key=f"pm_e_sub_{i}")
-    if "banner" in sl:
-        sl["banner"] = st.text_area("Banner text", sl.get("banner", ""), height=70, key=f"pm_e_ban_{i}")
-    if k == "dashboard":
-        for j, kp in enumerate(sl.get("kpis", [])):
-            c1, c2 = st.columns(2)
-            kp["value"] = c1.text_input(f"KPI {j+1} value", kp.get("value", ""), key=f"pm_e_kpiv_{i}_{j}")
-            kp["sub"] = c2.text_input(f"KPI {j+1} note", kp.get("sub", ""), key=f"pm_e_kpis_{i}_{j}")
-        sl["footer"] = st.text_input("Footer", sl.get("footer", ""), key=f"pm_e_foot_{i}")
-    if k in ("dashboard", "story_chart"):
-        for j, it in enumerate(sl.get("insights", [])):
-            it["head"] = st.text_input(f"Insight {j+1} head", it.get("head", ""), key=f"pm_e_ih_{i}_{j}")
-            it["text"] = st.text_area(f"Insight {j+1} text", it.get("text", ""), height=60, key=f"pm_e_it_{i}_{j}")
-    if k == "big_stat":
-        sl["stat_value"] = st.text_input("Big number", sl.get("stat_value", ""), key=f"pm_e_bsv_{i}")
-        sl["stat_label"] = st.text_input("Label", sl.get("stat_label", ""), key=f"pm_e_bsl_{i}")
-        sl["body"] = st.text_area("Body", sl.get("body", ""), height=70, key=f"pm_e_bsb_{i}")
-    if k == "takeaways":
+        sl["subtitle"] = st.text_input("Subtitle", sl.get("subtitle",""), key=f"pm2_e_s_{i}")
+    if k == "finding":
+        sl["narrative"] = st.text_area("Narrative", sl.get("narrative",""), height=90, key=f"pm2_e_n_{i}")
+        opts = ["waterfall","bar_ranked","line","area","donut","scatter","slope","dumbbell"]
+        cur = sl.get("chart_kind") or "bar_ranked"
+        sl["chart_kind"] = st.selectbox("Chart", opts,
+                                        index=opts.index(cur) if cur in opts else 1, key=f"pm2_e_c_{i}")
+    if k == "actions":
         for j, t in enumerate(sl.get("items", [])):
-            sl["items"][j] = st.text_input(f"Point {j+1}", t, key=f"pm_e_tk_{i}_{j}")
+            sl["items"][j] = st.text_input(f"Action {j+1}", t, key=f"pm2_e_a_{i}_{j}")
     if k == "closing":
-        sl["message"] = st.text_area("Closing message", sl.get("message", ""), height=70, key=f"pm_e_cm_{i}")
-    if k == "quality":
-        sl["summary"] = st.text_area("Summary", sl.get("summary", ""), height=70, key=f"pm_e_qs_{i}")
+        sl["message"] = st.text_area("Closing", sl.get("message",""), height=70, key=f"pm2_e_m_{i}")
+    if k == "storyline":
+        st.caption("Flow steps come from the storyboard structure picker above.")
 
 # ============================================================
 # MAIN
@@ -2526,9 +3020,9 @@ def initialize_analytics(df: pd.DataFrame, model: str, filename: str = "unknown"
     st.session_state.pop("upload_logged", None)
     st.session_state.pop("ppt_out_path", None)
     st.session_state.pop("ppt_payload", None)
-    for _k in ["pm_stage", "pm_chat", "pm_answers", "pm_step_i", "pm_stories_pool",
-               "pm_selected_ids", "pm_spec", "pm_out_path"]:
-        st.session_state.pop(_k, None)
+    for _k in list(st.session_state.keys()):
+        if _k.startswith("pm_") or _k.startswith("pm2_"):
+            st.session_state.pop(_k, None)
     log_upload(filename, df)
 
 
