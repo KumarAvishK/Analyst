@@ -429,7 +429,7 @@ def kx_apply_theme(fig: go.Figure) -> go.Figure:
 # GROQ WRAPPER
 # ============================================================
 
-FIXED_MODEL = "llama-3.1-8b-instant"
+FIXED_MODEL = "llama-3.3-70b-versatile"
 
 
 class GroqLLM:
@@ -3197,38 +3197,74 @@ def findings_brief(findings):
 # ---------- interpret a user message into one action ----------
 _CHART_OPTS = ["waterfall", "bar_ranked", "line", "area", "donut", "scatter"]
 
-def interpret_chat(user_msg, spec, findings, analytics, llm):
+def _deep_findings_brief(findings):
+    """Low-level: every proven number the agent can cite, with the full drill path."""
+    lines = []
+    for i, f in enumerate(findings):
+        lines.append(f"  [{i}] type={f.ftype} role={f.role} :: {f.fact_brief()}")
+    return "All proven findings (cite these exact numbers):\n" + "\n".join(lines)
+
+
+def _history_brief(history, k=8):
+    if not history:
+        return ""
+    turns = history[-k:]
+    out = []
+    for role, msg in turns:
+        who = "User" if role == "user" else "Assistant"
+        out.append(f"{who}: {msg}")
+    return "Conversation so far (remember this context):\n" + "\n".join(out)
+
+
+def interpret_chat(user_msg, spec, findings, analytics, llm, history=None):
+    """
+    Returns an action dict. Defaults to CONVERSATION ('answer'); only emits a
+    mutating action when the user clearly issues an imperative to change the deck.
+    `history` = list of (role, msg) carrying memory of the dialogue.
+    """
     if not llm:
         return {"action": "answer",
-                "text": "The AI engine isn't configured, so I can't take actions yet. "
+                "text": "The AI engine isn't configured, so I can't converse or take actions yet. "
                         "Add your GROQ_API_KEY to enable the assistant."}
     prompt = (
-        "You are the Presentation Maker assistant — an expert in data analysis, visualization, "
-        "and consulting storyboards. You can edit the user's deck or answer questions.\n\n"
-        f"{deck_brief(spec)}\n\n{data_brief_for_chat(analytics)}\n\n{findings_brief(findings)}\n\n"
-        f"User said: \"{user_msg}\"\n\n"
-        "Decide ONE action and return ONLY JSON (no prose, no fences):\n"
-        '- To answer/advise: {"action":"answer","text":"..."}\n'
-        '- Edit slide text: {"action":"edit_field","slide":N,"field":"title|narrative|takeaway|subtitle|message","value":"..."}\n'
-        f'- Change a chart: {{"action":"change_chart","slide":N,"chart_kind":"one of {_CHART_OPTS}"}}\n'
-        '- Reorder: {"action":"reorder","order":[slide numbers in new order]}\n'
-        '- Delete a slide: {"action":"drop_slide","slide":N}\n'
-        '- Add a slide from a NEW data cut: {"action":"add_data_slide","dimension":"<col>","metric":"<col>","kind":"bar_ranked|donut|waterfall"}\n'
-        '- Restyle whole deck: {"action":"restyle","theme":"...","font":"..."}\n\n'
-        "Rules: slide numbers must match the deck above. For add_data_slide, pick dimension/metric "
-        "from the available lists. If the user just asks a question, use answer. "
-        "If they want a rewrite 'punchier/shorter/etc', use edit_field with your improved text."
+        "You are the Presentation Maker assistant: a senior data-analysis & visualization consultant "
+        "having a CONVERSATION with the user about their deck. You have full memory of the dialogue.\n\n"
+        "DEFAULT TO TALKING. Only change the deck when the user gives a clear command to do so "
+        "(e.g. 'change', 'add', 'remove', 'reorder', 'make it', 'rewrite'). If they ask a question, "
+        "are exploring options, or say something ambiguous, use 'answer' and have a real conversation — "
+        "ask a clarifying question or lay out options. Never edit the deck just because you could.\n\n"
+        "When you answer, be SPECIFIC: cite the exact numbers from the findings below "
+        "(segments, contribution %, the drill path like 'NY × Q4 × Electronics = 49% of the drop'). "
+        "No vague generalities.\n\n"
+        f"{_history_brief(history)}\n\n"
+        f"{deck_brief(spec)}\n\n{data_brief_for_chat(analytics)}\n\n{_deep_findings_brief(findings)}\n\n"
+        f'User just said: "{user_msg}"\n\n'
+        "Return ONLY JSON (no fences). Choose ONE:\n"
+        '- Converse / answer / advise / ask a clarifying question: {"action":"answer","text":"...specific, with numbers..."}\n'
+        '- Edit slide text (ONLY on explicit request): {"action":"edit_field","slide":N,"field":"title|narrative|takeaway|subtitle","value":"..."}\n'
+        f'- Change a chart (explicit): {{"action":"change_chart","slide":N,"chart_kind":"one of {_CHART_OPTS}"}}\n'
+        '- Reorder (explicit): {"action":"reorder","order":[slide numbers]}\n'
+        '- Delete a slide (explicit): {"action":"drop_slide","slide":N}\n'
+        '- Add a slide from a new data cut (explicit): {"action":"add_data_slide","dimension":"<col>","metric":"<col>","kind":"bar_ranked|donut|waterfall"}\n'
+        '- Restyle (explicit): {"action":"restyle","theme":"...","font":"..."}\n\n'
+        "If in doubt, use answer. Slide numbers must match the deck list above."
     )
     try:
-        raw = _cr.sub(r"```json|```", "", llm.predict(prompt, max_tokens=400)).strip()
-        # grab the first {...} block
+        raw = _cr.sub(r"```json|```", "", llm.predict(prompt, max_tokens=600)).strip()
         mb = _cr.search(r"\{.*\}", raw, _cr.DOTALL)
         action = _cj.loads(mb.group(0) if mb else raw)
         if "action" not in action:
-            return {"action": "answer", "text": raw[:600]}
+            return {"action": "answer", "text": raw[:800]}
         return action
-    except Exception as e:
-        return {"action": "answer", "text": f"I couldn't parse that into an action — try rephrasing. ({e})"}
+    except Exception:
+        # On any parse failure, treat it as conversation, not a botched edit
+        try:
+            return {"action": "answer", "text": llm.predict(
+                f"{_history_brief(history)}\n\n{_deep_findings_brief(findings)}\n\n"
+                f"User: {user_msg}\nAnswer specifically with numbers from the findings, as a consultant.",
+                max_tokens=500).strip()}
+        except Exception:
+            return {"action": "answer", "text": "Could you rephrase that?"}
 
 
 # ---------- apply an action to the spec (mutates in place) ----------
@@ -3589,7 +3625,8 @@ def render_presentation_maker():
             _um = st.chat_input("Tell me what to change or ask a question…", key="pm2_chat_in")
             if _um:
                 st.session_state.pm2_chat_log.append(("user", _um))
-                _action = interpret_chat(_um, spec, findings, a, a.llm)
+                _action = interpret_chat(_um, spec, findings, a, a.llm,
+                                         history=st.session_state.pm2_chat_log[:-1])
                 _ok, _resp = apply_chat_action(_action, spec, findings, a, _chat_deps)
                 _prefix = "" if _action.get("action") == "answer" else ("✓ " if _ok else "⚠️ ")
                 st.session_state.pm2_chat_log.append(("assistant", _prefix + (_resp or "Done.")))
@@ -3840,7 +3877,7 @@ def main():
             f'<div style="font-size:0.78rem;color:#4a5568;background:#f7f8fb;'
             f'border:1px solid #e3e6ee;border-radius:6px;padding:0.35rem 0.7rem;'
             f'margin-top:0.3rem;margin-bottom:0.1rem;">'
-            f'⚡ Model: <strong style="color:#0a2540;">llama-3.1-8b-instant</strong></div>',
+            f'⚡ Model: <strong style="color:#0a2540;">llama-3.3-70b-versatile</strong></div>',
             unsafe_allow_html=True,
         )
 
