@@ -2129,7 +2129,13 @@ from pptx.oxml.ns import qn
 # STORYBOARD STYLES
 # ============================================================
 STORYBOARD_STYLES = {
-    "SCR — Consultant (recommended)": {
+    "Standard Consulting (recommended)": {
+        "key": "consulting",
+        "blurb": "Full executive deck: Executive Summary → Problem Definition (what/where/who) → Insights & Drivers → Recommendations → Impact → Next-Steps roadmap. Action-titles on every slide (golden rule).",
+        "role_order": ["situation", "root_cause", "interaction", "mix", "complication", "concentration", "correlation", "action", "context"],
+        "flow": ["Exec Summary", "Problem", "Insights & Drivers", "Recommendations", "Next Steps"],
+    },
+    "SCR — Consultant": {
         "key": "scr",
         "blurb": "Situation → Complication → Root-cause chain → Implication → Action. The classic McKinsey storyline.",
         "role_order": ["situation", "complication", "root_cause", "interaction", "mix", "evidence", "action", "context"],
@@ -2164,11 +2170,306 @@ STORYBOARD_STYLES = {
 
 def order_findings_by_style(findings, style_key):
     style = next((v for v in STORYBOARD_STYLES.values() if v["key"] == style_key),
-                 STORYBOARD_STYLES["SCR — Consultant (recommended)"])
+                 next(iter(STORYBOARD_STYLES.values())))
     rank = {r: i for i, r in enumerate(style["role_order"])}
     idx = sorted(range(len(findings)),
                  key=lambda i: (rank.get(findings[i].role, 50), -findings[i].importance))
     return idx[:8], style["flow"]
+
+
+# ---- Standard Consulting Storyline (manual-based) ----
+
+
+# ---- the canonical blueprint (what slots a full consulting deck has) ----
+CONSULTING_BLUEPRINT = [
+    # section, slide_role, layout, what finding-types fit this slot
+    ("Executive Summary", "exec_summary", "exec_summary", ["situation", "root_cause", "action"]),
+    ("Problem Definition", "what",        "stat_hero",    ["situation"]),
+    ("Problem Definition", "where",        "map_or_bar",  ["root_cause", "mix"]),
+    ("Problem Definition", "who",          "ranked_bar",  ["interaction", "mix", "concentration"]),
+    ("Insights & Drivers",  "root_cause",  "waterfall",   ["root_cause"]),
+    ("Insights & Drivers",  "segment",     "bar_ranked",  ["interaction", "mix"]),
+    ("Insights & Drivers",  "supporting",  "trend_or_scatter", ["situation", "correlation", "concentration"]),
+    ("Recommendations",     "actions",     "actions",     ["action"]),
+    ("Recommendations",     "impact",      "impact",      ["action"]),
+    ("Next Steps",          "roadmap",     "roadmap",     ["action"]),
+]
+
+
+def plan_consulting_storyline(findings, framing):
+    """
+    Map findings into the consulting blueprint. Returns an ordered list of
+    slide-plan dicts: {section, role, layout, finding_idx|None, title, takeaway}.
+    Each title is an ACTION TITLE (golden rule). Slots with no matching finding
+    are either filled from related findings or dropped (so we never show empties).
+    """
+    by_type = {}
+    for i, f in enumerate(findings):
+        by_type.setdefault(f.ftype, []).append(i)
+
+    used = set()
+    plan = []
+
+    def take(ftypes):
+        for t in ftypes:
+            for i in by_type.get(t, []):
+                if i not in used:
+                    used.add(i)
+                    return i
+        return None
+
+    # 1) Executive summary is synthesized, not a single finding
+    sit = next((i for i, f in enumerate(findings) if f.ftype == "situation"), None)
+    rc = next((i for i, f in enumerate(findings) if f.ftype in ("root_cause", "interaction")), None)
+    plan.append({
+        "section": "Executive Summary", "role": "exec_summary", "layout": "exec_summary",
+        "finding_idx": None, "core_situation": sit, "core_cause": rc,
+    })
+
+    # 2) walk the blueprint, attach a finding to each slot if available
+    for section, role, layout, ftypes in CONSULTING_BLUEPRINT:
+        if role == "exec_summary":
+            continue
+        if role in ("actions", "impact", "roadmap"):
+            # recommendation slots handled after
+            continue
+        fi = take(ftypes)
+        if fi is None:
+            continue
+        plan.append({"section": section, "role": role, "layout": layout, "finding_idx": fi})
+
+    # 3) recommendations block (always present; from action findings or framing recs)
+    recs = framing.get("recommendations") or []
+    plan.append({"section": "Recommendations", "role": "actions", "layout": "actions",
+                 "finding_idx": None, "recs": recs[:3]})
+    if framing.get("impacts"):
+        plan.append({"section": "Recommendations", "role": "impact", "layout": "impact",
+                     "finding_idx": None, "impacts": framing["impacts"][:3]})
+
+    # 4) next steps roadmap (always; from framing or generic)
+    plan.append({"section": "Next Steps", "role": "roadmap", "layout": "roadmap",
+                 "finding_idx": None, "steps": framing.get("roadmap")})
+
+    return plan
+
+
+# ---- LLM prompt scaffolding for action-titles + takeaways (golden rule) ----
+def action_title_prompt(finding, framing):
+    return (
+        "Write a SLIDE TITLE that states the full insight as a sentence (the 'golden rule': "
+        "a reader skimming only titles must understand the whole story).\n"
+        f"PROVEN facts: {finding.fact_brief()}\n"
+        "Bad: 'Sales by Region'. Good: 'North region contributes 60% of total growth'.\n"
+        "Use the real numbers. Return ONLY the title text, no quotes."
+    )
+
+
+def takeaway_prompt(finding, framing):
+    return (
+        "Write a one-line TAKEAWAY (the conclusion at the bottom of the slide) for this finding.\n"
+        f"PROVEN facts: {finding.fact_brief()}\n"
+        f"Decision at stake: {framing.get('decision','')}\n"
+        "One crisp sentence stating the 'so what'. Return ONLY the takeaway."
+    )
+
+
+def exec_summary_prompt(findings, framing, idxs):
+    facts = "; ".join(findings[i].fact_brief()[:90] for i in idxs if i is not None)
+    return (
+        "Write an EXECUTIVE SUMMARY for slide 1 of a consulting deck.\n"
+        f"Decision: {framing.get('decision','')}. Audience: {framing.get('audience','')}.\n"
+        f"Proven facts available: {facts}\n\n"
+        "Return ONLY JSON:\n"
+        '{"core_answer":"the single headline answer in one sentence",'
+        '"insights":["insight 1 w/ number","insight 2 w/ number","insight 3 w/ number"],'
+        '"actions":["action 1","action 2"]}'
+    )
+
+
+
+from pptx.util import Inches as In, Pt
+
+
+def render_consulting_slide(prs, blank, plan_item, findings, framing, th, G, idx, total):
+    """Render one slide-plan item. Returns the slide."""
+    s = prs.slides.add_slide(blank)
+    layout = plan_item["layout"]
+    SH = G["SH"]
+
+    def section_chip(section):
+        # small section locator top-right (helps the section flow read)
+        G["_txt"](s, section.upper(), 9.0, 0.62, 3.6, 0.3, size=9, font=th["bf"],
+                  color=th["soft"], bold=True, align="right", spacing=1.0)
+
+    def headline(title, tag="Insight"):
+        G["_pill"](s, 0.9, 0.55, tag, th)
+        G["_txt"](s, title, 0.86, 1.05, 11.7, 1.1, size=27, font=th["hf"],
+                  color=th["ink"], bold=True, ls=1.04)
+
+    def takeaway(text):
+        if not text:
+            return
+        G["_rect"](s, 0.9, 6.55, 11.55, 0.7, fill=th["tagbg"], radius=0.16)
+        G["_txt"](s, [("Takeaway  ", th["tagink"], True), (text, th["ink"], False)],
+                  1.15, 6.62, 11.1, 0.56, size=12.5, font=th["bf"], valign="middle")
+
+    def slidenum():
+        G["_txt"](s, f"{idx} / {total}", 12.5, 7.15, 0.6, 0.25, size=9, font=th["bf"],
+                  color=th["soft"], align="right")
+
+    # ---------- EXEC SUMMARY ----------
+    if layout == "exec_summary":
+        G["_bg"](s, th["canvas"])
+        G["_pill"](s, 0.9, 0.55, "Executive Summary", th)
+        es = plan_item.get("exec", {})
+        core = es.get("core_answer", "")
+        G["_txt"](s, core, 0.86, 1.1, 11.8, 1.5, size=30, font=th["hf"], color=th["ink"], bold=True, ls=1.05)
+        # 3 insight cards
+        insights = es.get("insights", [])[:3]
+        cw = 3.78; gap = 0.2; x0 = 0.9; y = 3.0
+        for i, ins in enumerate(insights):
+            x = x0 + i * (cw + gap)
+            G["_rect"](s, x, y, cw, 2.0, fill=th["panel"], line=th["line"], lw=1, radius=0.10, shdw=True)
+            G["_rect"](s, x, y, cw, 0.12, fill=th["accent"], shape=SH.RECTANGLE)
+            G["_txt"](s, str(i + 1), x + 0.2, y + 0.22, 0.6, 0.5, size=20, font=th["hf"],
+                      color=th["accent"], bold=True)
+            G["_txt"](s, ins, x + 0.2, y + 0.78, cw - 0.4, 1.1, size=12.5, font=th["bf"],
+                      color=th["ink"], ls=1.2)
+        # actions strip
+        acts = es.get("actions", [])[:2]
+        if acts:
+            G["_txt"](s, "RECOMMENDED ACTIONS", 0.9, 5.25, 6, 0.3, size=10, font=th["bf"],
+                      color=th["soft"], bold=True, spacing=1)
+            for i, ac in enumerate(acts):
+                yy = 5.6 + i * 0.62
+                G["_rect"](s, 0.9, yy, 0.16, 0.16, fill=th["accent"], shape=SH.OVAL)
+                G["_txt"](s, ac, 1.2, yy - 0.06, 11.2, 0.5, size=12.5, font=th["bf"], color=th["ink"], valign="middle")
+        slidenum()
+        return s
+
+    # ---------- STAT HERO (the 'what is happening') ----------
+    if layout == "stat_hero":
+        fi = plan_item["finding_idx"]; f = findings[fi]
+        section_chip(plan_item["section"])
+        G["_bg"](s, th["canvas"])
+        headline(plan_item.get("title", "What is happening"), tag=plan_item["section"].split()[0])
+        big = f.facts.get("pct") or f.facts.get("change") or f.facts.get("share") or ""
+        G["_txt"](s, str(big), 0.86, 2.4, 6.2, 1.8, size=110, font=th["hf"], color=th["accent"], bold=True)
+        G["_txt"](s, f.facts.get("metric", "").upper(), 0.92, 4.3, 6, 0.4, size=15, font=th["bf"],
+                  color=th["soft"], spacing=1)
+        # small supporting trend on the right if present
+        ch = f.chart or {}
+        if ch.get("labels"):
+            try: G["chart_line"](s, 7.4, 2.4, 5.0, 2.6, ch["labels"], ch["values"], th, area=True)
+            except Exception: pass
+        takeaway(plan_item.get("takeaway", ""))
+        slidenum()
+        return s
+
+    # ---------- FINDING with chart (where/who/root_cause/segment/supporting) ----------
+    if layout in ("waterfall", "bar_ranked", "ranked_bar", "map_or_bar", "trend_or_scatter"):
+        fi = plan_item["finding_idx"]; f = findings[fi]
+        section_chip(plan_item["section"])
+        G["_bg"](s, th["canvas"])
+        headline(plan_item.get("title", "Finding"), tag=plan_item["section"].split()[0])
+        ch = f.chart or {}; ck = plan_item.get("chart_kind") or ch.get("kind", "bar")
+        cx, cw, cy, chh = 0.9, 7.2, 2.25, 3.9
+        drew = False
+        try:
+            if ck == "waterfall" and ch.get("labels"):
+                G["chart_waterfall"](s, cx, cy, cw, chh, ch["labels"], ch["values"], th); drew = True
+            elif ck in ("bar", "bar_ranked", "ranked_bar", "map_or_bar") and ch.get("labels"):
+                G["chart_bar_ranked"](s, cx, cy, cw, chh, ch["labels"], ch["values"], th, 0); drew = True
+            elif ck in ("line", "area", "trend_or_scatter") and ch.get("labels"):
+                G["chart_line"](s, cx, cy, cw, chh, ch["labels"], ch["values"], th, area=(ck == "area")); drew = True
+            elif ck in ("donut", "pie") and ch.get("labels"):
+                G["chart_donut"](s, cx, cy, cw, chh, ch["labels"], ch["values"], th); drew = True
+            elif ck == "scatter" and ch.get("x"):
+                G["chart_scatter"](s, cx, cy, cw, chh, ch["x"], ch["y"], th); drew = True
+            elif ch.get("labels"):
+                G["chart_bar_ranked"](s, cx, cy, cw, chh, ch["labels"], ch["values"], th, 0); drew = True
+        except Exception:
+            drew = False
+        # right rail: key figure + narrative
+        ix = 8.4
+        big = f.facts.get("contribution_pct") or f.facts.get("share") or f.facts.get("pct") or ""
+        if big:
+            G["_rect"](s, ix, cy, 4.05, 1.15, fill=th["tagbg"], radius=0.12)
+            G["_txt"](s, str(big), ix, cy + 0.12, 4.05, 0.62, size=24, font=th["hf"],
+                      color=th["tagink"], bold=True, align="center")
+            G["_txt"](s, "key figure", ix, cy + 0.78, 4.05, 0.3, size=9.5, font=th["bf"],
+                      color=th["soft"], align="center")
+            ny = cy + 1.4
+        else:
+            ny = cy
+        G["_txt"](s, plan_item.get("narrative", ""), ix, ny + 0.05, 4.05, 2.2, size=13,
+                  font=th["bf"], color=th["body"], ls=1.3)
+        takeaway(plan_item.get("takeaway", ""))
+        slidenum()
+        return s
+
+    # ---------- ACTIONS ----------
+    if layout == "actions":
+        G["_bg"](s, th["canvas"])
+        headline(plan_item.get("title", "Recommended actions"), tag="Recommendations")
+        cols = [th["accent"], th["accent2"], th["soft"]]
+        for i, t in enumerate(plan_item.get("recs", [])[:3]):
+            y = 2.0 + i * 1.45
+            G["_rect"](s, 0.9, y, 11.55, 1.25, fill=th["panel"], line=th["line"], lw=1, radius=0.10, shdw=True)
+            G["_rect"](s, 0.9, y, 0.7, 1.25, fill=cols[i % 3], shape=SH.RECTANGLE)
+            G["_txt"](s, str(i + 1), 0.9, y, 0.7, 1.25, size=26, font=th["hf"], color="FFFFFF",
+                      bold=True, align="center", valign="middle")
+            G["_txt"](s, t, 1.8, y + 0.1, 10.4, 1.05, size=14, font=th["bf"], color=th["ink"],
+                      valign="middle", ls=1.15)
+        slidenum()
+        return s
+
+    # ---------- IMPACT ----------
+    if layout == "impact":
+        G["_bg"](s, th["canvas"])
+        headline(plan_item.get("title", "Expected impact"), tag="Recommendations")
+        imp = plan_item.get("impacts", [])[:3]
+        cw = 3.78; gap = 0.2; x0 = 0.9; y = 2.4
+        for i, m in enumerate(imp):
+            x = x0 + i * (cw + gap)
+            G["_rect"](s, x, y, cw, 2.4, fill=th["panel"], line=th["line"], lw=1, radius=0.10, shdw=True)
+            G["_txt"](s, m.get("value", ""), x, y + 0.3, cw, 1.0, size=40, font=th["hf"],
+                      color=th["accent"], bold=True, align="center")
+            G["_txt"](s, m.get("label", ""), x + 0.2, y + 1.5, cw - 0.4, 0.8, size=12, font=th["bf"],
+                      color=th["ink"], align="center", ls=1.2)
+        slidenum()
+        return s
+
+    # ---------- ROADMAP ----------
+    if layout == "roadmap":
+        G["_bg"](s, th["canvas"])
+        headline(plan_item.get("title", "Next steps & roadmap"), tag="Next Steps")
+        steps = plan_item.get("steps") or [
+            {"phase": "Now (0–30d)", "what": "Confirm the driver and brief owners"},
+            {"phase": "Next (1–3m)", "what": "Launch the highest-impact fix"},
+            {"phase": "Later (3–6m)", "what": "Scale what works, monitor leading indicators"},
+        ]
+        n = len(steps); cw = (11.55 - (n - 1) * 0.25) / n; x0 = 0.9; y = 2.6
+        for i, stp in enumerate(steps):
+            x = x0 + i * (cw + 0.25)
+            G["_rect"](s, x, y, cw, 2.2, fill=th["panel"], line=th["line"], lw=1, radius=0.10, shdw=True)
+            G["_rect"](s, x, y, cw, 0.55, fill=th["accent"], radius=0.10)
+            G["_txt"](s, stp.get("phase", f"Phase {i+1}"), x, y + 0.06, cw, 0.42, size=12,
+                      font=th["hf"], color="FFFFFF", bold=True, align="center", valign="middle")
+            G["_txt"](s, stp.get("what", ""), x + 0.18, y + 0.7, cw - 0.36, 1.4, size=12,
+                      font=th["bf"], color=th["ink"], ls=1.2)
+            if i < n - 1:
+                G["_txt"](s, "→", x + cw, y + 0.9, 0.25, 0.4, size=18, font=th["bf"],
+                          color=th["soft"], align="center")
+        slidenum()
+        return s
+
+    # fallback
+    G["_bg"](s, th["canvas"])
+    headline(plan_item.get("title", "Finding"))
+    slidenum()
+    return s
+
 
 
 # ============================================================
@@ -2488,6 +2789,15 @@ def _delta_chart_from_finding(f):
     return labels, deltas
 
 
+def __base_meta(framing, theme_name, font_name, style_key, ctx):
+    from datetime import datetime
+    return {"title": framing.get("title") or "Data Story",
+            "subtitle": framing.get("subtitle") or (ctx.describe()[0].title() + " analysis"),
+            "theme": theme_name, "font": font_name, "style": style_key,
+            "date": datetime.now().strftime("%B %Y"),
+            "decision": framing.get("decision", ""), "audience": framing.get("audience", "")}
+
+
 def build_consultant_spec(analytics, findings, ctx, framing, theme_name, font_name,
                           style_key, order, narrations, visuals):
     """
@@ -2506,6 +2816,55 @@ def build_consultant_spec(analytics, findings, ctx, framing, theme_name, font_na
     from_style = next((v for v in __STYLES.values() if v["key"] == style_key),
                       list(__STYLES.values())[0])
     flow = from_style["flow"]
+
+    # ---- Standard Consulting storyline: planner-driven, section-based ----
+    if style_key == "consulting":
+        # build exec-summary content (LLM if available, else fallback)
+        sit = [i for i, f in enumerate(findings) if f.ftype == "situation"]
+        rc = [i for i, f in enumerate(findings) if f.ftype in ("root_cause", "interaction")]
+        exec_content = {
+            "core_answer": (narrations.get(rc[0]) if rc else narrations.get(sit[0]) if sit else
+                            "The data points to a clear, addressable driver."),
+            "insights": [narrations.get(i, "") for i in order[:3] if narrations.get(i)],
+            "actions": (framing.get("recommendations") or [])[:2],
+        }
+        if analytics.llm:
+            try:
+                import json as _j, re as _r
+                out = analytics.llm.predict(exec_summary_prompt(findings, framing, order[:5]), max_tokens=420)
+                p = _j.loads(_r.sub(r"```json|```", "", out).strip())
+                exec_content = {"core_answer": p.get("core_answer", exec_content["core_answer"]),
+                                "insights": p.get("insights", exec_content["insights"])[:3],
+                                "actions": p.get("actions", exec_content["actions"])[:2]}
+            except Exception:
+                pass
+
+        plan = plan_consulting_storyline(findings, framing)
+        # attach titles/narratives/takeaways/charts to each plan item
+        for pi in plan:
+            if pi["role"] == "exec_summary":
+                pi["exec"] = exec_content
+                continue
+            fi = pi.get("finding_idx")
+            if fi is not None:
+                v = visuals.get(fi, {})
+                pi["title"] = v.get("action_title") or "Finding"
+                pi["chart_kind"] = v.get("chart_kind")
+                pi["narrative"] = narrations.get(fi, findings[fi].narrative or "")
+                pi["takeaway"] = pi["narrative"]
+            elif pi["role"] == "actions":
+                pi["recs"] = (framing.get("recommendations") or [narrations.get(i, "") for i in order[:3]])[:3]
+                pi["title"] = "Recommended actions"
+            elif pi["role"] == "impact":
+                pi["impacts"] = framing.get("impacts", [])[:3]
+                pi["title"] = "Expected impact"
+            elif pi["role"] == "roadmap":
+                pi["steps"] = framing.get("roadmap")
+                pi["title"] = "Next steps & roadmap"
+        return {"meta": {**__base_meta(framing, theme_name, font_name, style_key, ctx),
+                         "flow": flow},
+                "consulting_plan": plan, "findings_ref": True}
+
 
     slides = [{"kind":"title", "title":meta["title"], "subtitle":meta["subtitle"], "date":meta["date"]}]
     slides.append({"kind":"storyline", "style_name":from_style["__name"], "flow":flow,
@@ -2537,12 +2896,29 @@ def build_consultant_spec(analytics, findings, ctx, framing, theme_name, font_na
 
 
 # ── PPTX RENDER ─────────────────────────────────────────────
-def build_consultant_pptx(spec, out_path, charts_mod):
+def build_consultant_pptx(spec, out_path, charts_mod, findings=None, framing=None):
     """charts_mod = the module namespace holding _bg,_rect,_txt,_pill,_section_head,chart_*"""
     th = _theme(spec["meta"]["theme"], spec["meta"]["font"])
     G = charts_mod
     prs = Presentation(); prs.slide_width=In(13.333); prs.slide_height=In(7.5)
     blank = prs.slide_layouts[6]; W,H = 13.333, 7.5
+
+    # ---- Standard Consulting storyline path ----
+    if spec.get("consulting_plan") is not None:
+        plan = spec["consulting_plan"]
+        meta = spec["meta"]
+        # title slide
+        ts = prs.slides.add_slide(blank); G["_bg"](ts, th["accent"])
+        G["_rect"](ts, 0,0,0.18,H, fill=th["accent2"], shape=G["SH"].RECTANGLE)
+        G["_txt"](ts, meta["date"].upper(), 0.9,1.5,6,0.4, size=12, font=th["bf"], color="FFFFFF", bold=True, spacing=3)
+        G["_txt"](ts, meta["title"], 0.86,2.2,11,2.2, size=48, font=th["hf"], color="FFFFFF", bold=True, ls=1.04)
+        G["_txt"](ts, meta.get("subtitle",""), 0.9,4.8,9.5,0.8, size=18, font=th["bf"], color="EDEBFF")
+        total = len(plan) + 1
+        for i, pi in enumerate(plan, 2):
+            render_consulting_slide(prs, blank, pi, findings or [], framing or {}, th, G, i, total)
+        prs.save(out_path)
+        from pathlib import Path
+        return True, f"Generated {Path(out_path).name} ({Path(out_path).stat().st_size//1024} KB)"
 
     def num(s, n): G["_txt"](s, str(n), 12.7, 7.15, 0.4, 0.25, size=9, font=th["bf"], color=th["soft"], align="right")
 
@@ -2941,21 +3317,39 @@ def render_presentation_maker():
 
         spec = st.session_state.pm2_spec
         spec["meta"]["theme"] = theme_name; spec["meta"]["font"] = font_name
+        _is_consulting = spec.get("consulting_plan") is not None
 
-        st.markdown(
-            f'<div class="kx-callout"><strong>Deck ready — {len(spec["slides"])} slides.</strong> '
-            "Preview each slide, edit any text inline, restyle from the pickers up top, then download.</div>",
-            unsafe_allow_html=True,
-        )
-
-        for i, sl in enumerate(spec["slides"]):
-            st.markdown(f"**Slide {i+1} — {sl['kind'].replace('_',' ').title()}**")
-            pv, ed = st.columns([3, 2])
-            with pv:
-                _cmp.html(render_consultant_html(sl, spec["meta"]), height=290)
-            with ed:
-                _consult_editor(sl, i)
-            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        if _is_consulting:
+            plan = spec["consulting_plan"]
+            st.markdown(
+                f'<div class="kx-callout"><strong>Deck ready — {len(plan)+1} slides.</strong> '
+                "Standard consulting storyline: Exec Summary → Problem → Insights & Drivers → "
+                "Recommendations → Next Steps. Edit any text inline, restyle up top, then download.</div>",
+                unsafe_allow_html=True,
+            )
+            for i, pi in enumerate(plan):
+                lab = pi.get("role", "slide").replace("_", " ").title()
+                st.markdown(f"**{pi['section']} — {lab}**")
+                pv, ed = st.columns([3, 2])
+                with pv:
+                    _cmp.html(render_consulting_html(pi, spec["meta"]), height=270)
+                with ed:
+                    _consulting_editor(pi, i)
+                st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        else:
+            st.markdown(
+                f'<div class="kx-callout"><strong>Deck ready — {len(spec["slides"])} slides.</strong> '
+                "Preview each slide, edit any text inline, restyle from the pickers up top, then download.</div>",
+                unsafe_allow_html=True,
+            )
+            for i, sl in enumerate(spec["slides"]):
+                st.markdown(f"**Slide {i+1} — {sl['kind'].replace('_',' ').title()}**")
+                pv, ed = st.columns([3, 2])
+                with pv:
+                    _cmp.html(render_consultant_html(sl, spec["meta"]), height=290)
+                with ed:
+                    _consult_editor(sl, i)
+                st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
         st.markdown("---")
         if st.button("⬇ Generate & download .pptx", type="primary", key="pm2_export"):
@@ -2965,7 +3359,8 @@ def render_presentation_maker():
             fn = st.session_state.get("upload_filename", "deck").replace(".", "_")
             outp = str(outdir / f"KiteIQX_{fn}_{_dtm.now():%Y%m%d_%H%M%S}.pptx")
             with st.spinner("Rendering PowerPoint…"):
-                ok, msg = build_consultant_pptx(spec, outp, _CHARTS_NS)
+                ok, msg = build_consultant_pptx(spec, outp, _CHARTS_NS,
+                                                findings=findings, framing=framing)
             if ok:
                 st.session_state.pm2_out = outp; st.success(msg)
             else:
@@ -2978,6 +3373,115 @@ def render_presentation_maker():
                                        file_name=_P(st.session_state.pm2_out).name,
                                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                                        key="pm2_dl")
+
+
+def _consulting_editor(pi, i):
+    role = pi.get("role")
+    if role == "exec_summary":
+        ex = pi.setdefault("exec", {})
+        ex["core_answer"] = st.text_area("Core answer", ex.get("core_answer", ""), height=70, key=f"pm2_ce_core_{i}")
+        for j in range(3):
+            ins = ex.get("insights", [])
+            while len(ins) < 3: ins.append("")
+            ins[j] = st.text_input(f"Insight {j+1}", ins[j], key=f"pm2_ce_ins_{i}_{j}")
+            ex["insights"] = ins
+    elif role in ("actions",):
+        recs = pi.setdefault("recs", [])
+        for j in range(min(3, max(1, len(recs)))):
+            while len(recs) <= j: recs.append("")
+            recs[j] = st.text_input(f"Action {j+1}", recs[j], key=f"pm2_ce_rec_{i}_{j}")
+    elif role == "impact":
+        for j, m in enumerate(pi.get("impacts", [])):
+            c1, c2 = st.columns(2)
+            m["value"] = c1.text_input(f"Value {j+1}", m.get("value", ""), key=f"pm2_ce_iv_{i}_{j}")
+            m["label"] = c2.text_input(f"Label {j+1}", m.get("label", ""), key=f"pm2_ce_il_{i}_{j}")
+    elif role == "roadmap":
+        st.caption("Roadmap phases — edit inline.")
+        steps = pi.get("steps") or []
+        for j, sp_ in enumerate(steps):
+            sp_["what"] = st.text_input(f"{sp_.get('phase','Phase')}", sp_.get("what", ""), key=f"pm2_ce_rm_{i}_{j}")
+    else:
+        if "title" in pi:
+            pi["title"] = st.text_input("Headline (action title)", pi.get("title", ""), key=f"pm2_ce_t_{i}")
+        if "narrative" in pi:
+            pi["narrative"] = st.text_area("Narrative", pi.get("narrative", ""), height=70, key=f"pm2_ce_n_{i}")
+        if "takeaway" in pi:
+            pi["takeaway"] = st.text_input("Takeaway", pi.get("takeaway", ""), key=f"pm2_ce_tk_{i}")
+        if pi.get("chart_kind") is not None:
+            opts = ["waterfall", "bar_ranked", "line", "area", "donut", "scatter"]
+            cur = pi.get("chart_kind") or "bar_ranked"
+            pi["chart_kind"] = st.selectbox("Chart", opts,
+                                            index=opts.index(cur) if cur in opts else 1, key=f"pm2_ce_c_{i}")
+
+
+def render_consulting_html(pi, meta):
+    """Lightweight HTML preview of a consulting plan item."""
+    th = _theme(meta["theme"], meta["font"])
+    A = "#" + th["accent"]; INK = "#" + th["ink"]; SOFT = "#" + th["soft"]
+    LINE = "#" + th["line"]; TAG = "#" + th["tagbg"]; TAGINK = "#" + th["tagink"]; CAN = "#" + th["canvas"]; PANEL = "#" + th["panel"]
+    frame = (f'width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;position:relative;'
+             f'font-family:Inter,system-ui,sans-serif;border:1px solid {LINE};background:{CAN};'
+             f'box-shadow:0 2px 10px rgba(0,0,0,0.06);')
+    role = pi.get("role")
+
+    def chip(tag):
+        return (f'<div style="position:absolute;left:4%;top:7%;background:{TAG};color:{TAGINK};'
+                f'font-size:0.55rem;font-weight:700;letter-spacing:1.5px;padding:3px 12px;border-radius:20px;">{tag.upper()}</div>')
+
+    def head(t):
+        return f'<div style="position:absolute;left:4%;top:15%;right:5%;font-size:1.4rem;font-weight:800;color:{INK};line-height:1.1;">{t}</div>'
+
+    if role == "exec_summary":
+        ex = pi.get("exec", {})
+        cards = "".join(
+            f'<div style="flex:1;background:{PANEL};border:1px solid {LINE};border-radius:8px;padding:8px;">'
+            f'<div style="color:{A};font-weight:800;font-size:0.8rem;">{j+1}</div>'
+            f'<div style="font-size:0.55rem;color:{INK};line-height:1.25;margin-top:3px;">{ins}</div></div>'
+            for j, ins in enumerate(ex.get("insights", [])[:3]))
+        acts = "".join(f'<div style="font-size:0.55rem;color:{INK};margin-top:3px;">● {ac}</div>' for ac in ex.get("actions", [])[:2])
+        return (f'<div style="{frame}">{chip("Executive Summary")}'
+                f'<div style="position:absolute;left:4%;top:16%;right:5%;font-size:1.25rem;font-weight:800;color:{INK};line-height:1.1;">{ex.get("core_answer","")}</div>'
+                f'<div style="position:absolute;left:4%;right:4%;top:46%;display:flex;gap:6px;">{cards}</div>'
+                f'<div style="position:absolute;left:4%;top:78%;"><div style="font-size:0.5rem;color:{SOFT};font-weight:700;letter-spacing:1px;">RECOMMENDED ACTIONS</div>{acts}</div></div>')
+
+    if role == "actions":
+        rows = "".join(
+            f'<div style="display:flex;margin-bottom:6px;border:1px solid {LINE};border-radius:8px;overflow:hidden;background:#fff;">'
+            f'<div style="background:{A};color:#fff;width:30px;display:flex;align-items:center;justify-content:center;font-weight:800;">{j+1}</div>'
+            f'<div style="padding:7px 10px;font-size:0.6rem;color:{INK};">{t}</div></div>'
+            for j, t in enumerate(pi.get("recs", [])[:3]))
+        return f'<div style="{frame}">{chip("Recommendations")}{head(pi.get("title","Recommended actions"))}<div style="position:absolute;left:4%;right:4%;top:32%;">{rows}</div></div>'
+
+    if role == "impact":
+        cards = "".join(
+            f'<div style="flex:1;background:{PANEL};border:1px solid {LINE};border-radius:8px;padding:10px;text-align:center;">'
+            f'<div style="font-size:1.6rem;font-weight:800;color:{A};">{m.get("value","")}</div>'
+            f'<div style="font-size:0.52rem;color:{INK};margin-top:4px;">{m.get("label","")}</div></div>'
+            for m in pi.get("impacts", [])[:3])
+        return f'<div style="{frame}">{chip("Recommendations")}{head(pi.get("title","Expected impact"))}<div style="position:absolute;left:4%;right:4%;top:36%;display:flex;gap:6px;">{cards}</div></div>'
+
+    if role == "roadmap":
+        steps = pi.get("steps") or [{"phase":"Now","what":"Confirm driver"},{"phase":"Next","what":"Launch fix"},{"phase":"Later","what":"Scale"}]
+        cards = ""
+        for k, sp_ in enumerate(steps):
+            cards += (f'<div style="flex:1;background:#fff;border:1px solid {LINE};border-radius:8px;overflow:hidden;">'
+                      f'<div style="background:{A};color:#fff;font-size:0.55rem;font-weight:700;padding:4px;text-align:center;">{sp_.get("phase","")}</div>'
+                      f'<div style="padding:7px;font-size:0.52rem;color:{INK};">{sp_.get("what","")}</div></div>')
+            if k < len(steps)-1: cards += f'<div style="align-self:center;color:{SOFT};">→</div>'
+        return f'<div style="{frame}">{chip("Next Steps")}{head(pi.get("title","Next steps & roadmap"))}<div style="position:absolute;left:4%;right:4%;top:38%;display:flex;gap:5px;align-items:stretch;">{cards}</div></div>'
+
+    # finding-style (stat_hero / charts): headline / visual / takeaway
+    big = ""
+    svg = ""
+    title = pi.get("title", "Finding")
+    narrative = pi.get("narrative", "")
+    tk = pi.get("takeaway", "")
+    inner = (f'{chip(pi.get("section","Insight"))}{head(title)}'
+             f'<div style="position:absolute;left:4%;top:32%;right:36%;font-size:0.6rem;color:{INK};line-height:1.35;">{narrative}</div>'
+             f'<div style="position:absolute;right:4%;top:32%;width:30%;background:{TAG};border-radius:8px;padding:8px;font-size:0.55rem;color:{INK};">{pi.get("chart_kind","chart").replace("_"," ")} visual</div>')
+    if tk:
+        inner += f'<div style="position:absolute;left:4%;right:4%;bottom:5%;background:{TAG};border-radius:8px;padding:6px 10px;font-size:0.55rem;color:{INK};"><b style="color:{TAGINK};">Takeaway</b> {tk}</div>'
+    return f'<div style="{frame}">{inner}</div>'
 
 
 def _consult_editor(sl, i):
