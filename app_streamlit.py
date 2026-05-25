@@ -3147,6 +3147,254 @@ def _pm_reset():
             st.session_state.pop(k, None)
 
 
+
+
+# ============================================================
+# CHAT AGENT (data + visuals + deck-aware)
+# ============================================================
+import json as _cj
+import re as _cr
+
+
+
+# ---------- grounding: describe the deck + the data to the LLM ----------
+def _plan_slide_list(spec):
+    """Return numbered slide list (matching preview) + index map -> plan idx."""
+    items = []
+    if spec.get("consulting_plan") is not None:
+        # slide 1 = title; plan items are slides 2..N
+        items.append((1, "title", "Title slide", None))
+        for pi_i, pi in enumerate(spec["consulting_plan"]):
+            n = pi_i + 2
+            label = pi.get("title") or pi.get("role", "slide")
+            items.append((n, pi.get("role", "slide"), label, pi_i))
+    else:
+        for i, sl in enumerate(spec.get("slides", [])):
+            items.append((i + 1, sl.get("kind", "slide"), sl.get("title", sl.get("message", "")), i))
+    return items
+
+
+def deck_brief(spec):
+    rows = []
+    for n, role, label, _ in _plan_slide_list(spec):
+        rows.append(f"  Slide {n} [{role}]: {label}")
+    return "Current deck:\n" + "\n".join(rows)
+
+
+def data_brief_for_chat(analytics):
+    dims = [c for c in analytics.categorical_cols if 2 <= analytics.df[c].nunique() <= 40]
+    mets = list(analytics.money_cols) or analytics.numeric_cols
+    return (f"Available dimensions to slice by: {', '.join(dims) or '(none)'}\n"
+            f"Available metrics: {', '.join(mets[:8]) or '(none)'}\n"
+            f"Time column: {analytics.datetime_cols[0] if analytics.datetime_cols else '(none)'}")
+
+
+def findings_brief(findings):
+    return "Key proven findings:\n" + "\n".join(
+        f"  - [{f.ftype}] {f.fact_brief()[:110]}" for f in findings[:8])
+
+
+# ---------- interpret a user message into one action ----------
+_CHART_OPTS = ["waterfall", "bar_ranked", "line", "area", "donut", "scatter"]
+
+def interpret_chat(user_msg, spec, findings, analytics, llm):
+    if not llm:
+        return {"action": "answer",
+                "text": "The AI engine isn't configured, so I can't take actions yet. "
+                        "Add your GROQ_API_KEY to enable the assistant."}
+    prompt = (
+        "You are the Presentation Maker assistant — an expert in data analysis, visualization, "
+        "and consulting storyboards. You can edit the user's deck or answer questions.\n\n"
+        f"{deck_brief(spec)}\n\n{data_brief_for_chat(analytics)}\n\n{findings_brief(findings)}\n\n"
+        f"User said: \"{user_msg}\"\n\n"
+        "Decide ONE action and return ONLY JSON (no prose, no fences):\n"
+        '- To answer/advise: {"action":"answer","text":"..."}\n'
+        '- Edit slide text: {"action":"edit_field","slide":N,"field":"title|narrative|takeaway|subtitle|message","value":"..."}\n'
+        f'- Change a chart: {{"action":"change_chart","slide":N,"chart_kind":"one of {_CHART_OPTS}"}}\n'
+        '- Reorder: {"action":"reorder","order":[slide numbers in new order]}\n'
+        '- Delete a slide: {"action":"drop_slide","slide":N}\n'
+        '- Add a slide from a NEW data cut: {"action":"add_data_slide","dimension":"<col>","metric":"<col>","kind":"bar_ranked|donut|waterfall"}\n'
+        '- Restyle whole deck: {"action":"restyle","theme":"...","font":"..."}\n\n'
+        "Rules: slide numbers must match the deck above. For add_data_slide, pick dimension/metric "
+        "from the available lists. If the user just asks a question, use answer. "
+        "If they want a rewrite 'punchier/shorter/etc', use edit_field with your improved text."
+    )
+    try:
+        raw = _cr.sub(r"```json|```", "", llm.predict(prompt, max_tokens=400)).strip()
+        # grab the first {...} block
+        mb = _cr.search(r"\{.*\}", raw, _cr.DOTALL)
+        action = _cj.loads(mb.group(0) if mb else raw)
+        if "action" not in action:
+            return {"action": "answer", "text": raw[:600]}
+        return action
+    except Exception as e:
+        return {"action": "answer", "text": f"I couldn't parse that into an action — try rephrasing. ({e})"}
+
+
+# ---------- apply an action to the spec (mutates in place) ----------
+def _plan_idx_from_slide(spec, slide_n):
+    for n, role, label, pidx in _plan_slide_list(spec):
+        if n == slide_n:
+            return role, pidx
+    return None, None
+
+
+def apply_chat_action(action, spec, findings, analytics, deps):
+    """
+    deps = {propose_visual, narrate_finding, contribution_by_dim, mix_by_dim,
+            _period_split, Finding, CONSULT_THEMES, CONSULT_FONTS, plan helpers...}
+    Returns (ok, human_message).
+    """
+    act = action.get("action")
+    is_plan = spec.get("consulting_plan") is not None
+
+    if act == "answer":
+        return True, action.get("text", "")
+
+    if act == "restyle":
+        th = action.get("theme"); ft = action.get("font")
+        if th and th in deps["CONSULT_THEMES"]:
+            spec["meta"]["theme"] = th
+        if ft and ft in deps["CONSULT_FONTS"]:
+            spec["meta"]["font"] = ft
+        return True, f"Restyled the deck (theme={spec['meta']['theme']}, font={spec['meta']['font']})."
+
+    if act == "edit_field":
+        slide = int(action.get("slide", 0)); field = action.get("field", ""); value = action.get("value", "")
+        role, pidx = _plan_idx_from_slide(spec, slide)
+        if is_plan:
+            if pidx is None:  # title slide
+                if field in ("title", "subtitle"):
+                    spec["meta"][field] = value; return True, f"Updated deck {field}."
+                return False, "That field isn't on the title slide."
+            pi = spec["consulting_plan"][pidx]
+            if role == "exec_summary":
+                pi.setdefault("exec", {})
+                if field in ("title", "core_answer"):
+                    pi["exec"]["core_answer"] = value; return True, "Updated the executive summary."
+            if field in ("title", "narrative", "takeaway"):
+                pi[field] = value; return True, f"Updated slide {slide} {field}."
+            return False, f"Can't edit '{field}' on that slide."
+        else:
+            sl = spec["slides"][pidx]
+            if field in sl or field in ("title", "narrative", "subtitle", "message", "takeaway"):
+                sl[field] = value; return True, f"Updated slide {slide} {field}."
+            return False, f"Field '{field}' not found on slide {slide}."
+
+    if act == "change_chart":
+        slide = int(action.get("slide", 0)); kind = action.get("chart_kind", "")
+        role, pidx = _plan_idx_from_slide(spec, slide)
+        if pidx is None:
+            return False, "That slide has no chart to change."
+        pi = spec["consulting_plan"][pidx] if is_plan else spec["slides"][pidx]
+        fi = pi.get("finding_idx")
+        if fi is None or fi >= len(findings):
+            # legacy slide with embedded chart
+            if pi.get("chart"):
+                pi["chart_kind"] = kind; return True, f"Changed slide {slide} chart to {kind}."
+            return False, "That slide isn't backed by a chartable finding."
+        ok, reason = deps["validate_chart_choice"](findings[fi], kind)
+        if not ok:
+            return False, f"Can't use {kind} here — {reason}. Try one that fits this finding."
+        pi["chart_kind"] = kind
+        return True, f"Changed slide {slide} chart to {kind}."
+
+    if act == "reorder":
+        order = action.get("order", [])
+        if not is_plan:
+            return False, "Reordering is available for the consulting storyline."
+        # map slide numbers -> plan indices (skip title=1)
+        pmap = {n: pidx for n, role, label, pidx in _plan_slide_list(spec) if pidx is not None}
+        new_plan = []
+        for n in order:
+            if n in pmap and pmap[n] is not None:
+                new_plan.append(spec["consulting_plan"][pmap[n]])
+        # append any omitted
+        seen = set(id(p) for p in new_plan)
+        for p in spec["consulting_plan"]:
+            if id(p) not in seen:
+                new_plan.append(p)
+        spec["consulting_plan"] = new_plan
+        return True, "Reordered the slides."
+
+    if act == "drop_slide":
+        slide = int(action.get("slide", 0))
+        role, pidx = _plan_idx_from_slide(spec, slide)
+        if pidx is None:
+            return False, "Can't drop the title slide."
+        target = spec["consulting_plan"] if is_plan else spec["slides"]
+        if 0 <= pidx < len(target):
+            target.pop(pidx); return True, f"Dropped slide {slide}."
+        return False, "Slide not found."
+
+    if act == "add_data_slide":
+        return _add_data_slide(action, spec, findings, analytics, deps)
+
+    return False, f"I don't know how to '{act}' yet."
+
+
+def _match_col(name, cols):
+    if not name:
+        return None
+    n = name.strip().lower().replace(" ", "_")
+    for c in cols:
+        if c.lower() == n or c.lower().replace(" ", "_") == n:
+            return c
+    for c in cols:
+        if n in c.lower() or c.lower() in n:
+            return c
+    return None
+
+
+def _add_data_slide(action, spec, findings, analytics, deps):
+    """Tier 2: run a fresh decomposition on a user-named dimension+metric, add a slide."""
+    df = analytics.df
+    dim = _match_col(action.get("dimension"), analytics.categorical_cols)
+    metric = _match_col(action.get("metric"), analytics.numeric_cols) or \
+             (analytics.money_cols[0] if analytics.money_cols else
+              (analytics.numeric_cols[0] if analytics.numeric_cols else None))
+    if not dim:
+        return False, ("I couldn't match that dimension to a column. Available: "
+                       + ", ".join(analytics.categorical_cols[:8]))
+    if not metric:
+        return False, "No numeric metric available to chart."
+
+    fmt = deps["_fmt"]
+    # build a mix/ranking finding
+    g = df.groupby(dim)[metric].sum().sort_values(ascending=False)
+    tot = float(g.sum()) or 1.0
+    top = g.index[0]; topv = float(g.iloc[0]); share = topv / tot * 100
+    Finding = deps["Finding"]
+    f = Finding("mix", "root_cause",
+                {"metric": metric, "dimension": dim, "segment": str(top),
+                 "value": fmt(topv), "share": f"{share:.0f}%"},
+                chart={"kind": action.get("kind", "bar_ranked") if action.get("kind") in ("bar_ranked","donut","waterfall") else "bar",
+                       "title": f"{metric} by {dim}",
+                       "labels": [str(x) for x in g.head(6).index.tolist()],
+                       "values": [round(float(x), 2) for x in g.head(6).values.tolist()],
+                       "metric": metric, "dim": dim},
+                importance=55 + share / 2)
+    findings.append(f); fi = len(findings) - 1
+    v = deps["propose_visual"](f, analytics.llm, spec["meta"].get("audience", "leadership"))
+    f.narrative = deps["narrate_finding"](f, {"audience": spec["meta"].get("audience", "")}, analytics.llm)
+
+    item = {"section": "Insights & Drivers", "role": "segment", "layout": "bar_ranked",
+            "finding_idx": fi, "title": v.get("action_title") or f"{top} leads {dim}",
+            "chart_kind": v.get("chart_kind", "bar_ranked"),
+            "narrative": f.narrative, "takeaway": f.narrative}
+    if spec.get("consulting_plan") is not None:
+        # insert before recommendations
+        plan = spec["consulting_plan"]
+        ins_at = next((i for i, p in enumerate(plan) if p.get("section") == "Recommendations"), len(plan))
+        plan.insert(ins_at, item)
+    else:
+        spec.setdefault("slides", []).append(
+            {"kind": "finding", "tag": "Breakdown", "title": item["title"],
+             "narrative": f.narrative, "chart_kind": item["chart_kind"],
+             "chart": f.chart, "facts": f.facts, "ftype": "mix"})
+    return True, f"Added a slide breaking {metric} down by {dim} (top: {top}, {share:.0f}%)."
+
+
 def render_presentation_maker():
     a = st.session_state.get("analytics")
     if a is None:
@@ -3318,6 +3566,35 @@ def render_presentation_maker():
         spec = st.session_state.pm2_spec
         spec["meta"]["theme"] = theme_name; spec["meta"]["font"] = font_name
         _is_consulting = spec.get("consulting_plan") is not None
+
+        # -------- floating chat assistant (data + visuals + deck aware) --------
+        if "pm2_chat_log" not in st.session_state:
+            st.session_state.pm2_chat_log = [
+                ("assistant", "Hi — I know your data, the charts, and this deck. "
+                              "Ask me to edit slides, add a breakdown from your data, "
+                              "or explain anything. e.g. *make slide 3's title punchier*, "
+                              "*add a slide breaking sales by state*, *why a waterfall here?*")
+            ]
+        _chat_deps = {
+            "validate_chart_choice": validate_chart_choice, "propose_visual": propose_visual,
+            "narrate_finding": narrate_finding, "Finding": Finding, "_fmt": _fmt,
+            "CONSULT_THEMES": CONSULT_THEMES, "CONSULT_FONTS": CONSULT_FONTS,
+        }
+        _pop = st.popover("💬 Ask the assistant", use_container_width=False)
+        with _pop:
+            st.caption("Edits apply instantly — scroll down to see the deck update.")
+            for _role, _msg in st.session_state.pm2_chat_log[-8:]:
+                with st.chat_message("assistant" if _role == "assistant" else "user"):
+                    st.markdown(_msg)
+            _um = st.chat_input("Tell me what to change or ask a question…", key="pm2_chat_in")
+            if _um:
+                st.session_state.pm2_chat_log.append(("user", _um))
+                _action = interpret_chat(_um, spec, findings, a, a.llm)
+                _ok, _resp = apply_chat_action(_action, spec, findings, a, _chat_deps)
+                _prefix = "" if _action.get("action") == "answer" else ("✓ " if _ok else "⚠️ ")
+                st.session_state.pm2_chat_log.append(("assistant", _prefix + (_resp or "Done.")))
+                st.session_state.pm2_spec = spec
+                st.rerun()
 
         if _is_consulting:
             plan = spec["consulting_plan"]
