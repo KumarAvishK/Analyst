@@ -2452,13 +2452,27 @@ def render_consulting_slide(prs, blank, plan_item, findings, framing, th, G, idx
         G["_bg"](s, th["canvas"])
         headline(plan_item.get("title", "What is happening"), tag=plan_item["section"].split()[0])
         big = f.facts.get("pct") or f.facts.get("change") or f.facts.get("share") or ""
-        G["_txt"](s, str(big), 0.86, 2.4, 6.2, 1.8, size=110, font=th["hf"], color=th["accent"], bold=True)
-        G["_txt"](s, f.facts.get("metric", "").upper(), 0.92, 4.3, 6, 0.4, size=15, font=th["bf"],
+        G["_txt"](s, str(big), 0.86, 2.05, 6.2, 1.6, size=96, font=th["hf"], color=th["accent"], bold=True)
+        G["_txt"](s, f.facts.get("metric", "").upper(), 0.92, 3.75, 6, 0.4, size=15, font=th["bf"],
                   color=th["soft"], spacing=1)
-        # small supporting trend on the right if present
+        # stat strip: prior / recent / delta / period  (real numbers, fills the space)
+        stats = []
+        if f.facts.get("prior"): stats.append(("Prior", f.facts["prior"]))
+        if f.facts.get("recent"): stats.append(("Recent", f.facts["recent"]))
+        if f.facts.get("change"): stats.append(("Change", f.facts["change"]))
+        if f.facts.get("period"): stats.append(("Period", f.facts["period"]))
+        if stats:
+            sw = 1.5; gap = 0.2; sx = 0.9; sy = 4.6
+            for i, (lab, val) in enumerate(stats[:4]):
+                x = sx + i*(sw+gap)
+                G["_rect"](s, x, sy, sw, 1.0, fill=th["panel"], line=th["line"], lw=1, radius=0.12, shdw=True)
+                G["_txt"](s, str(val), x, sy+0.16, sw, 0.5, size=18, font=th["hf"],
+                          color=th["ink"], bold=True, align="center")
+                G["_txt"](s, lab.upper(), x, sy+0.66, sw, 0.25, size=8.5, font=th["bf"],
+                          color=th["soft"], align="center", spacing=0.5)
         ch = f.chart or {}
         if ch.get("labels"):
-            try: G["chart_line"](s, 7.4, 2.4, 5.0, 2.6, ch["labels"], ch["values"], th, area=True)
+            try: G["chart_line"](s, 7.4, 2.2, 5.0, 2.9, ch["labels"], ch["values"], th, area=True)
             except Exception: pass
         takeaway(plan_item.get("takeaway", ""))
         slidenum()
@@ -2471,38 +2485,57 @@ def render_consulting_slide(prs, blank, plan_item, findings, framing, th, G, idx
         G["_bg"](s, th["canvas"])
         headline(plan_item.get("title", "Finding"), tag=plan_item["section"].split()[0])
         ch = f.chart or {}; ck = plan_item.get("chart_kind") or ch.get("kind", "bar")
-        cx, cw, cy, chh = 0.9, 7.2, 2.25, 3.9
+        labels = ch.get("labels", []); values = ch.get("values", [])
+        # decide: does this finding have per-segment supporting numbers for a table?
+        has_table = bool(labels) and bool(values) and ck in ("waterfall", "bar", "bar_ranked", "ranked_bar", "map_or_bar", "donut", "pie")
+        cx, cy = 0.9, 2.2
+        cw = 7.4 if has_table else 11.5      # wide chart; leave room only if a real table exists
+        chh = 3.7
         drew = False
         try:
-            if ck == "waterfall" and ch.get("labels"):
-                G["chart_waterfall"](s, cx, cy, cw, chh, ch["labels"], ch["values"], th); drew = True
-            elif ck in ("bar", "bar_ranked", "ranked_bar", "map_or_bar") and ch.get("labels"):
-                G["chart_bar_ranked"](s, cx, cy, cw, chh, ch["labels"], ch["values"], th, 0); drew = True
-            elif ck in ("line", "area", "trend_or_scatter") and ch.get("labels"):
-                G["chart_line"](s, cx, cy, cw, chh, ch["labels"], ch["values"], th, area=(ck == "area")); drew = True
-            elif ck in ("donut", "pie") and ch.get("labels"):
-                G["chart_donut"](s, cx, cy, cw, chh, ch["labels"], ch["values"], th); drew = True
+            if ck == "waterfall" and labels:
+                G["chart_waterfall"](s, cx, cy, cw, chh, labels, values, th,
+                                     pcts=ch.get("secondary")); drew = True
+            elif ck in ("bar", "bar_ranked", "ranked_bar", "map_or_bar") and labels:
+                G["chart_bar_ranked"](s, cx, cy, cw, chh, labels, values, th, 0); drew = True
+            elif ck in ("line", "area", "trend_or_scatter") and labels:
+                G["chart_line"](s, cx, cy, cw, chh, labels, values, th, area=(ck == "area")); drew = True
+            elif ck in ("donut", "pie") and labels:
+                G["chart_donut"](s, cx, cy, cw, chh, labels, values, th); drew = True
             elif ck == "scatter" and ch.get("x"):
                 G["chart_scatter"](s, cx, cy, cw, chh, ch["x"], ch["y"], th); drew = True
-            elif ch.get("labels"):
-                G["chart_bar_ranked"](s, cx, cy, cw, chh, ch["labels"], ch["values"], th, 0); drew = True
+            elif labels:
+                G["chart_bar_ranked"](s, cx, cy, cw, chh, labels, values, th, 0); drew = True
         except Exception:
             drew = False
-        # right rail: key figure + narrative
-        ix = 8.4
-        big = f.facts.get("contribution_pct") or f.facts.get("share") or f.facts.get("pct") or ""
-        if big:
-            G["_rect"](s, ix, cy, 4.05, 1.15, fill=th["tagbg"], radius=0.12)
-            G["_txt"](s, str(big), ix, cy + 0.12, 4.05, 0.62, size=24, font=th["hf"],
-                      color=th["tagink"], bold=True, align="center")
-            G["_txt"](s, "key figure", ix, cy + 0.78, 4.05, 0.3, size=9.5, font=th["bf"],
-                      color=th["soft"], align="center")
-            ny = cy + 1.4
-        else:
-            ny = cy
-        G["_txt"](s, plan_item.get("narrative", ""), ix, ny + 0.05, 4.05, 2.2, size=13,
-                  font=th["bf"], color=th["body"], ls=1.3)
-        takeaway(plan_item.get("takeaway", ""))
+
+        # ---- supporting DATA TABLE on the right (real numbers, not repeated text) ----
+        if has_table and drew:
+            tx, tw = 8.5, 4.0
+            G["_txt"](s, "SUPPORTING DATA", tx, cy, tw, 0.3, size=10, font=th["hf"],
+                      color=th["soft"], bold=True, spacing=1)
+            tot = sum(abs(v) for v in values) or 1
+            # header row
+            ty = cy + 0.42; rh = 0.46
+            G["_txt"](s, [("Segment", th["soft"], True)], tx, ty, 1.9, 0.3, size=9, font=th["bf"])
+            G["_txt"](s, [("Value", th["soft"], True)], tx+1.9, ty, 1.05, 0.3, size=9, font=th["bf"], align="right")
+            G["_txt"](s, [("Share", th["soft"], True)], tx+2.95, ty, 1.05, 0.3, size=9, font=th["bf"], align="right")
+            ty += 0.34
+            top_n = sorted(range(len(values)), key=lambda i: -abs(values[i]))[:6]
+            for rank, i in enumerate(top_n):
+                seg = str(labels[i]); val = values[i]; share = abs(val)/tot*100
+                hot = (rank == 0)
+                if hot:
+                    G["_rect"](s, tx-0.1, ty-0.04, tw, rh-0.08, fill=th["tagbg"], radius=0.14)
+                G["_txt"](s, seg[:16], tx, ty, 1.9, rh, size=10.5, font=th["bf"],
+                          color=(th["tagink"] if hot else th["ink"]), bold=hot, valign="middle")
+                G["_txt"](s, f"{val:+,.0f}" if ck=="waterfall" else f"{val:,.0f}",
+                          tx+1.9, ty, 1.05, rh, size=10.5, font=th["bf"],
+                          color=(th["tagink"] if hot else th["body"]), bold=hot, align="right", valign="middle")
+                G["_txt"](s, f"{share:.0f}%", tx+2.95, ty, 1.05, rh, size=10.5, font=th["bf"],
+                          color=(th["accent"] if hot else th["soft"]), bold=hot, align="right", valign="middle")
+                ty += rh
+        takeaway(plan_item.get("takeaway", "") or plan_item.get("narrative", ""))
         slidenum()
         return s
 
@@ -2648,50 +2681,65 @@ def _axis_style(ch, th, hide_val=False):
     except Exception: pass
 
 
-def chart_waterfall(s, x,y,w,h, labels, deltas, th, accent=None, start_total=None):
+def chart_waterfall(s, x,y,w,h, labels, deltas, th, accent=None, start_total=None, pcts=None):
     """
-    Floating waterfall drawn with positioned rectangles (robust for +/- deltas).
-    Shows a 'Total' anchor bar first, then each signed delta floating from the
-    running cumulative line. Native charts can't float below zero cleanly, so we
-    draw bars as shapes against a computed value->pixel scale.
-    deltas = signed segment contributions; start_total = bar height to anchor (optional).
+    Data-dense floating waterfall. Each bar shows its signed delta AND its % of the
+    total move; a final 'Net' bar anchors the cumulative result; a faint running
+    line connects the steps. pcts = optional list of contribution % per segment.
     """
     accent = accent or th["accent"]
     neg = th.get("neg", "E5484D")
-    # running cumulative positions
+    total = sum(deltas)
+    if pcts is None:
+        denom = sum(abs(d) for d in deltas) or 1
+        pcts = [d / (total if total else denom) * 100 for d in deltas]
+    # cumulative incl. a final Net bar (from 0 to total)
     cum=[0.0]
     for d in deltas: cum.append(cum[-1]+d)
-    # value range across all running points and zero
-    pts = cum + [0.0]
+    show_labels = list(labels) + ["Net"]
+    show_deltas = list(deltas) + [total]
+    bar_tops = list(cum[:-1]) + [0.0]      # net bar starts at 0
+    bar_bots = list(cum[1:]) + [total]
+    pts = cum + [0.0, total]
     vmax=max(pts); vmin=min(pts); rng=(vmax-vmin) or 1
-    pad=rng*0.12; vmax+=pad; vmin-=pad; rng=vmax-vmin
-    plot_x, plot_y, plot_w, plot_h = x, y+0.1, w, h-0.7
-    def yv(v): return plot_y + (vmax - v)/rng*plot_h     # value -> y pixel
+    pad=rng*0.18; vmax+=pad; vmin-=pad; rng=vmax-vmin
+    plot_x, plot_y, plot_w, plot_h = x, y+0.1, w, h-0.75
+    def yv(v): return plot_y + (vmax - v)/rng*plot_h
     zero_y = yv(0)
-    # baseline
     _rect(s, plot_x, zero_y-0.006, plot_w, 0.012, fill=th["line"], shape=SH.RECTANGLE)
-    n=len(deltas); slot=plot_w/max(1,n); bw=slot*0.56
-    for i,d in enumerate(deltas):
-        top=cum[i]; bot=cum[i+1]
+    n=len(show_deltas); slot=plot_w/max(1,n); bw=slot*0.58
+    for i,d in enumerate(show_deltas):
+        is_net = (i==n-1)
+        top=bar_tops[i]; bot=bar_bots[i]
         y_hi=yv(max(top,bot)); y_lo=yv(min(top,bot))
         bx=plot_x + i*slot + (slot-bw)/2
-        _rect(s, bx, y_hi, bw, max(0.04,y_lo-y_hi), fill=accent if d>=0 else neg, radius=0.12)
-        # connector line to next bar
-        if i<n-1:
+        col = th["ink"] if is_net else (accent if d>=0 else neg)
+        _rect(s, bx, y_hi, bw, max(0.05,y_lo-y_hi), fill=col, radius=0.10)
+        # running connector
+        if i<n-2:
             cy=yv(cum[i+1])
             _rect(s, bx+bw, cy-0.004, slot-bw, 0.008, fill=th["soft"], shape=SH.RECTANGLE)
-        # delta label above/below the bar
-        lbl=f"{d:+,.0f}"
-        ly = y_hi-0.28 if d>=0 else y_lo+0.02
-        _txt(s, lbl, bx-0.2, ly, bw+0.4, 0.26, size=9, font=th["bf"],
-             color=accent if d>=0 else neg, bold=True, align="center")
-        # category label under baseline
-        _txt(s, str(labels[i]), bx-0.2, plot_y+plot_h+0.06, bw+0.4, 0.4, size=9.5,
-             font=th["bf"], color=th["ink"], align="center")
+        # value label
+        lbl=f"{d:+,.0f}" if not is_net else f"{d:,.0f}"
+        ly = y_hi-0.30 if (d>=0 or is_net) else y_lo+0.03
+        _txt(s, lbl, bx-0.25, ly, bw+0.5, 0.24, size=10, font=th["bf"],
+             color=col, bold=True, align="center")
+        # contribution % (the data-density add) under the value, skip Net
+        if not is_net:
+            # place pct clear of the bar: below negative bars, above the value for positives
+            py = (ly + 0.22) if (d >= 0) else (ly + 0.22)
+            _txt(s, f"{pcts[i]:.0f}% of move", bx-0.25, py, bw+0.5, 0.2, size=7.5,
+                 font=th["bf"], color=th["soft"], align="center")
+        # category label
+        _txt(s, str(show_labels[i]), bx-0.25, plot_y+plot_h+0.08, bw+0.5, 0.4, size=9.5,
+             font=th["bf"], color=(th["ink"] if not is_net else th["accent"]),
+             bold=is_net, align="center")
     return None
 
 
-def chart_bar_ranked(s, x,y,w,h, labels, values, th, highlight_idx=0):
+def chart_bar_ranked(s, x,y,w,h, labels, values, th, highlight_idx=0, show_share=True):
+    """Ranked bars, driver highlighted, with value + share% labels and an average
+    reference line drawn as an overlay (data-dense)."""
     cd=CategoryChartData(); cd.categories=[str(l) for l in labels]; cd.add_series("v", values)
     gf=s.shapes.add_chart(CT.COLUMN_CLUSTERED, In(x),In(y),In(w),In(h), cd); ch=gf.chart
     ch.has_title=False; ch.has_legend=False; ch.plots[0].gap_width=70
@@ -2703,10 +2751,26 @@ def chart_bar_ranked(s, x,y,w,h, labels, values, th, highlight_idx=0):
     dl=plot.data_labels; dl.font.size=Pt(11); dl.font.color.rgb=_hx(th["ink"]); dl.font.bold=True
     dl.position=LP.OUTSIDE_END; dl.number_format='#,##0'; dl.number_format_is_linked=False
     _axis_style(ch, th, hide_val=True)
+    # overlay: average reference line + share% under each bar
+    tot=sum(values) or 1; avg=tot/len(values) if values else 0
+    vmax=max(values) or 1
+    plot_x, plot_y, plot_w, plot_h = x+0.35, y+0.12, w-0.5, h-0.55
+    if show_share:
+        n=len(values); slot=plot_w/max(1,n)
+        # average line
+        ay = plot_y + (1 - avg/ (vmax*1.12))*plot_h
+        _rect(s, plot_x, ay-0.004, plot_w, 0.008, fill=th["accent2"], shape=SH.RECTANGLE)
+        _txt(s, f"avg {avg:,.0f}", plot_x+plot_w-1.3, ay-0.24, 1.3, 0.2, size=8,
+             font=th["bf"], color=th["accent2"], align="right", bold=True)
+        for i,v in enumerate(values):
+            cxp=plot_x + i*slot
+            _txt(s, f"{v/tot*100:.0f}%", cxp, plot_y+plot_h+0.04, slot, 0.2, size=8,
+                 font=th["bf"], color=(th["accent"] if i==highlight_idx else th["soft"]),
+                 align="center", bold=(i==highlight_idx))
     return ch
 
 
-def chart_line(s, x,y,w,h, labels, values, th, area=False):
+def chart_line(s, x,y,w,h, labels, values, th, area=False, ref_label=None):
     cd=CategoryChartData(); cd.categories=[str(l) for l in labels]; cd.add_series("v", values)
     kind=CT.AREA if area else CT.LINE
     gf=s.shapes.add_chart(kind, In(x),In(y),In(w),In(h), cd); ch=gf.chart
@@ -2717,7 +2781,21 @@ def chart_line(s, x,y,w,h, labels, values, th, area=False):
         ser.format.line.color.rgb=_hx(th["accent"]); ser.format.line.width=Pt(2.5)
     else:
         ser.smooth=True; ser.format.line.color.rgb=_hx(th["accent"]); ser.format.line.width=Pt(3)
+    # data labels (density)
+    try:
+        plot=ch.plots[0]; plot.has_data_labels=True
+        dl=plot.data_labels; dl.font.size=Pt(8); dl.font.color.rgb=_hx(th["soft"])
+        dl.number_format='#,##0'; dl.number_format_is_linked=False; dl.position=LP.ABOVE
+    except Exception: pass
     _axis_style(ch, th)
+    # average reference line overlay
+    if values:
+        avg=sum(values)/len(values); vmax=max(values); vmin=min(values); rng=(vmax-vmin) or 1
+        plot_x, plot_y, plot_w, plot_h = x+0.4, y+0.1, w-0.5, h-0.5
+        ay=plot_y + (vmax-avg)/(rng*1.1)*plot_h
+        _rect(s, plot_x, ay-0.004, plot_w, 0.008, fill=th["accent2"], shape=SH.RECTANGLE)
+        _txt(s, ref_label or f"avg {avg:,.0f}", plot_x+plot_w-1.4, ay-0.22, 1.4, 0.2, size=8,
+             font=th["bf"], color=th["accent2"], align="right", bold=True)
     return ch
 
 
