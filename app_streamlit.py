@@ -47,6 +47,13 @@ try:
 except ImportError:
     GROQ_AVAILABLE = False
 
+# Anthropic Claude imports (soft)
+try:
+    from anthropic import Anthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+
 
 # ============================================================
 # CONFIG
@@ -83,6 +90,23 @@ def _get_groq_key() -> str:
 
 
 GROQ_API_KEY = _get_groq_key()
+
+
+# ============================================================
+# CLAUDE (ANTHROPIC) API KEY  — from st.secrets / env
+# ============================================================
+def _get_anthropic_key() -> str:
+    """Prefer st.secrets['ANTHROPIC_API_KEY'], then env var. No hardcoded fallback."""
+    try:
+        if "ANTHROPIC_API_KEY" in st.secrets:
+            return st.secrets["ANTHROPIC_API_KEY"]
+    except Exception:
+        pass
+    return os.environ.get("ANTHROPIC_API_KEY", "")
+
+
+ANTHROPIC_API_KEY = _get_anthropic_key()
+CLAUDE_MODEL = "claude-sonnet-4-6"
 
 # ============================================================
 # GOOGLE SHEETS LOGGER
@@ -459,9 +483,32 @@ class GroqLLM:
             return f"AI error: {e}"
 
 
-# ============================================================
-# ANALYTICS CORE
-# ============================================================
+class ClaudeLLM:
+    """Anthropic Claude wrapper with the same .predict() interface as GroqLLM."""
+    def __init__(self, api_key: str, model: str = CLAUDE_MODEL):
+        self.client = Anthropic(api_key=api_key)
+        self.model = model
+
+    def predict(self, prompt: str, max_tokens: int = 2000, system: str = None) -> str:
+        if system is None:
+            system = (
+                "You are KiteIQX Intelligence, a senior management consultant. "
+                "Speak in clear business language. Always give specific numbers and "
+                "concrete recommendations - never vague generalities."
+            )
+        try:
+            r = self.client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=0.2,
+                system=system,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            # concatenate text blocks
+            parts = [b.text for b in r.content if getattr(b, "type", None) == "text"]
+            return "".join(parts) if parts else (r.content[0].text if r.content else "")
+        except Exception as e:
+            return f"AI error: {e}"
 
 class UniversalAnalytics:
     def __init__(self, df: pd.DataFrame, llm=None):
@@ -2065,6 +2112,57 @@ def _scr_order(findings):
     return idx[:8]
 
 
+def agent_choose_structure(findings, framing, llm):
+    """
+    The agent (Claude) freely picks the best storyboard STRUCTURE for this data,
+    and explains why. Returns {style_key, style_name, rationale}.
+    Validates the pick against the real STORYBOARD_STYLES; falls back to consulting.
+    """
+    valid = {v["key"]: name for name, v in STORYBOARD_STYLES.items()}
+    default_key = "consulting"
+    default_name = next((n for n, v in STORYBOARD_STYLES.items() if v["key"] == default_key),
+                        next(iter(STORYBOARD_STYLES.keys())))
+    if not llm:
+        return {"style_key": default_key, "style_name": default_name,
+                "rationale": "Defaulted to the Standard Consulting storyline (no AI configured)."}
+
+    # describe the menu of structures + what the data looks like
+    menu = "\n".join(f"  - {name} (key={v['key']}): {v['blurb']}" for name, v in STORYBOARD_STYLES.items())
+    roles = {}
+    for f in findings:
+        roles[f.role] = roles.get(f.role, 0) + 1
+    shape = ", ".join(f"{k}×{v}" for k, v in roles.items())
+    facts = "; ".join(f.fact_brief()[:80] for f in findings[:6])
+
+    prompt = (
+        "You are a McKinsey engagement manager. Choose the BEST storyboard structure "
+        "for THIS specific dataset and goal — you have full freedom to pick.\n\n"
+        f"Decision at stake: {framing.get('decision','(unspecified)')}\n"
+        f"Audience: {framing.get('audience','leadership')}\n"
+        f"Finding shape (role×count): {shape}\n"
+        f"Top findings: {facts}\n\n"
+        f"Available structures:\n{menu}\n\n"
+        "Pick the one that best fits the story this data tells. For example: a single dominant "
+        "driver suits a deep-dive; a portfolio of segments suits a comparison; a clear time decline "
+        "suits chronological; a board that wants the answer first suits pyramid; a full diagnostic "
+        "suits standard consulting.\n"
+        "Return ONLY JSON: {\"key\":\"<one of the keys above>\","
+        "\"rationale\":\"2-3 sentences: why this structure fits THIS data and decision\"}"
+    )
+    try:
+        raw = _re.sub(r"```json|```", "", llm.predict(prompt, max_tokens=300)).strip()
+        mb = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        p = _json.loads(mb.group(0) if mb else raw)
+        key = p.get("key", default_key)
+        if key not in valid:
+            key = default_key
+        return {"style_key": key, "style_name": valid.get(key, default_name),
+                "rationale": p.get("rationale", "Chosen by the agent for this data.")}
+    except Exception:
+        return {"style_key": default_key, "style_name": default_name,
+                "rationale": "Defaulted to Standard Consulting (agent selection unavailable)."}
+
+
 def narrate_finding(finding, framing, llm):
     """Consultant prose from PROVEN facts only. LLM never sees raw data, only facts."""
     if not llm:
@@ -3456,12 +3554,16 @@ def render_presentation_maker():
     c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
     theme_name = c1.selectbox("Visual style", list(CONSULT_THEMES.keys()), key="pm2_theme")
     font_name = c2.selectbox("Font", list(CONSULT_FONTS.keys()), key="pm2_font")
-    style_label = c3.selectbox("Storyboard structure", list(STORYBOARD_STYLES.keys()), key="pm2_style")
+    _style_opts = ["✨ Let the agent decide"] + list(STORYBOARD_STYLES.keys())
+    style_label = c3.selectbox("Storyboard structure", _style_opts, key="pm2_style")
     with c4:
         st.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)
         if st.button("↺ Restart", key="pm2_restart", use_container_width=True):
             _pm_reset(); st.rerun()
-    st.caption(STORYBOARD_STYLES[style_label]["blurb"])
+    if style_label == "✨ Let the agent decide":
+        st.caption("The agent will pick the storyboard structure that best fits your data and goal, and explain why.")
+    else:
+        st.caption(STORYBOARD_STYLES[style_label]["blurb"])
     st.markdown("---")
 
     stage = st.session_state.pm2_stage
@@ -3526,17 +3628,34 @@ def render_presentation_maker():
     # ---- STORYBOARD: agent drafts ordered narrative + reasoning ----
     elif stage == "storyboard":
         framing = st.session_state.pm2_framing
+        # resolve the storyboard structure — agent decides, or user-picked
+        if "pm2_resolved_style" not in st.session_state:
+            if style_label == "✨ Let the agent decide":
+                with st.spinner("The agent is choosing the best structure for your data…"):
+                    choice = agent_choose_structure(findings, framing, a.llm)
+                st.session_state.pm2_resolved_style = choice["style_key"]
+                st.session_state.pm2_resolved_name = choice["style_name"]
+                st.session_state.pm2_resolved_why = choice["rationale"]
+            else:
+                st.session_state.pm2_resolved_style = STORYBOARD_STYLES[style_label]["key"]
+                st.session_state.pm2_resolved_name = style_label
+                st.session_state.pm2_resolved_why = None
+        resolved_key = st.session_state.pm2_resolved_style
+        resolved_name = st.session_state.pm2_resolved_name
+
         if "pm2_sb" not in st.session_state:
             with st.spinner("Drafting the storyline…"):
                 sb = draft_storyboard(findings, framing, a.llm)
-                # also let the chosen STYLE re-order if user picked a non-SCR structure
-                style_key = STORYBOARD_STYLES[style_label]["key"]
-                style_order, _flow = order_findings_by_style(findings, style_key)
-                # prefer the agent order but keep only findings present
+                style_order, _flow = order_findings_by_style(findings, resolved_key)
                 st.session_state.pm2_sb = sb
                 st.session_state.pm2_style_order = style_order
         sb = st.session_state.pm2_sb
         with st.chat_message("assistant"):
+            if st.session_state.get("pm2_resolved_why"):
+                st.markdown(f"**I chose the _{resolved_name}_ structure.**")
+                st.markdown(f"_{st.session_state.pm2_resolved_why}_")
+            else:
+                st.markdown(f"**Structure: _{resolved_name}_**")
             st.markdown("**Here's the storyline I'd tell:**")
             st.markdown(f"_{sb['reasoning']}_")
             for n, oi in enumerate(sb["order"], 1):
@@ -3593,7 +3712,9 @@ def render_presentation_maker():
                 if not recs:
                     recs = [narrations[i] for i in order[:3]]
                 framing["recommendations"] = recs
-                style_key = STORYBOARD_STYLES[style_label]["key"]
+                style_key = st.session_state.get("pm2_resolved_style",
+                                                  STORYBOARD_STYLES.get(style_label, {}).get("key", "consulting")
+                                                  if style_label != "✨ Let the agent decide" else "consulting")
                 spec = build_consultant_spec(a, findings, ctx, framing, theme_name, font_name,
                                              style_key, order, narrations, visuals)
             st.session_state.pm2_spec = spec
@@ -3824,7 +3945,13 @@ def _consult_editor(sl, i):
 
 def initialize_analytics(df: pd.DataFrame, model: str, filename: str = "unknown"):
     llm = None
-    if GROQ_AVAILABLE and GROQ_API_KEY:
+    # Prefer Claude (Anthropic); fall back to Groq if Claude isn't configured.
+    if ANTHROPIC_AVAILABLE and ANTHROPIC_API_KEY:
+        try:
+            llm = ClaudeLLM(api_key=ANTHROPIC_API_KEY, model=CLAUDE_MODEL)
+        except Exception as e:
+            st.error(f"Could not initialize Claude: {e}")
+    if llm is None and GROQ_AVAILABLE and GROQ_API_KEY:
         try:
             llm = GroqLLM(api_key=GROQ_API_KEY, model=model)
         except Exception as e:
@@ -3867,17 +3994,23 @@ def main():
 
     with st.sidebar:
         st.markdown("### Configuration")
-        if not GROQ_AVAILABLE:
-            st.error("`groq` package not installed.")
-        elif not GROQ_API_KEY:
-            st.warning("No GROQ_API_KEY configured. AI features will be disabled.")
+        if ANTHROPIC_AVAILABLE and ANTHROPIC_API_KEY:
+            st.success("AI engine ready — Claude.")
+            _model_label = CLAUDE_MODEL
+        elif GROQ_AVAILABLE and GROQ_API_KEY:
+            st.success("AI engine ready — Groq (Claude not configured).")
+            _model_label = FIXED_MODEL
+        elif not ANTHROPIC_AVAILABLE and not GROQ_AVAILABLE:
+            st.error("Neither `anthropic` nor `groq` package installed.")
+            _model_label = "(none)"
         else:
-            st.success("AI engine ready.")
+            st.warning("No ANTHROPIC_API_KEY in secrets. Add it to enable AI features.")
+            _model_label = "(none)"
         st.markdown(
             f'<div style="font-size:0.78rem;color:#4a5568;background:#f7f8fb;'
             f'border:1px solid #e3e6ee;border-radius:6px;padding:0.35rem 0.7rem;'
             f'margin-top:0.3rem;margin-bottom:0.1rem;">'
-            f'⚡ Model: <strong style="color:#0a2540;">llama-3.3-70b-versatile</strong></div>',
+            f'⚡ Model: <strong style="color:#0a2540;">{_model_label}</strong></div>',
             unsafe_allow_html=True,
         )
 
